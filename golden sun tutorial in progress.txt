@@ -1,0 +1,812 @@
+press start is placed in oam tiles, first tile at 06010000
+breakpoint works at 08004016 stmia r3!, {r0-r2} some kind of DMA transer, source address:
+r0 = 020367bc, and our tile data is placed exactly there.
+break at this address 03003628 strb r3, [r1], #0x1. looks like some kind of custom unpacking routine. and this byte was previously loaded from [r0] 080F38BD (f38bd in ROM)
+need to disasm this. that's lz77 (which is technically LZSS, as it has bit flags for defining block type): 
+        Flag data (8bit)
+          Bit 0-7   Type Flags for next 8 Blocks, MSB first
+        Block Type 0 - Uncompressed - Copy 1 Byte from Source to Dest
+          Bit 0-7   One data byte to be copied to dest
+
+        Block Type 1 - Compressed - Copy X bytes Y bytes back
+	  XX YY
+no sign of size data, cause it is destroyed by inline character
+
+code analys shows that control bytes are XY ZZ, where Y is 4bit length(zero-based), XZZ - 24 bit distance.
+if length == 0, then it's expanded length mode: X0 ZZ LL, where length = LL + 0x10, distance = xZZ
+if length == 0, distance == 0; end of compressed stream
+
+These are very important for lz tool programming, as it was close to impossible to catch that imperical.
+
+
+tracing back from iwram code is impossible - breaks don't work in vbasdlh and no$gba, so jump to the end of subroutine, code retruns to 
+08005414                 BL      unpackLZ
+set a bp for execution
+
+Breakpoint 0 reached
+R00=08324be8 R04=030077ff R08=08324be8 R12=000000e0
+R01=02010000 R05=00000096 R09=00000001 R13=03007e50
+R02=84000096 R06=0300355c R10=02010000 R14=080053fd
+R03=040000d4 R07=00000005 R11=03007e76 R15=08005416
+CPSR=2000003f (..C...T Mode: 1f)
+
+in R0 is another pointer. but for second time we will have our pointer. make a tracelog:
+debugger> trace once off
+debugger> trace file log.txt
+debugger> trace start
+debugger> c
+Continuing after breakpoint
+Breakpoint 0 reached
+R00=080f38bc R04=030077ff R08=080f38bc R12=08005419
+R01=020367bc R05=00000096 R09=00000001 R13=03007e50
+R02=84000096 R06=0300355c R10=020367bc R14=080053fd
+R03=040000d4 R07=00000014 R11=03007e76 R15=08005416
+CPSR=2000003f (..C...T Mode: 1f)
+08005412  4651 mov r1, r10
+> 08005414  f001 bl $080072fc
+debugger> trace stop
+
+08004904 6820 ldr r0, [r4, #0x0]                  R00=00000000 R01=00000400 R02=00000400 R03=00000100 R04=03001e50
+seek up:
+080F2A0A 481e ldr r0, [$080f2a84] (=$080f38bc)
+80f2a84 - is a ptr table. 80f38bc - pointer for first flag byte
+
+30037a8 from ida is exit. R0 will have 8F39AB: last byte of compressed chunk to check our decompressor (F0 bytes for whole compressed gfx piece) 
+
+
+one can think, that uncompressed size is (20 tiles x8x8 pixels)/2 (as it's 4bpp) = 0x280 bytes. But remember, what we saw: gfx was transfered via DMA. and If we see at outPtr in the beginning and end: 2036abc - 20367bc = 0x300 bytes. What is actually encoded in compressed stream. 
+
+
+40 FF 0101: means FF and then distance is 1 and length is 2.  length > distance, which copies bytes, which were copied before, but in the same LZ reference pair.
+
+
+testing encode work:
+*Main> findLzMatch "abcabcabc" "zzzzabczz"
+(5,3)
+*Main> findLzMatch "abcabcabc" "zzabzzzabczz"
+(5,3)
+*Main> findLzMatch "abcabcabc" "zzabczzzabczz"
+(5,3)
+*Main> findLzMatch "abcabcabc" "zzabczzzabzz"
+(10,3)
+*Main> findLzMatch "abcabcabc" "zzzzzzzzzzzabc"
+(3,9)
+
+
+FFFFFF00F011110FF001001FF0FFFF10F0111101F0010000FFFF0000111101
+00 
+FFFFFF00F011110FF001001FF0FFFF10F001
+
+you can either math it as refer (len 3, dist 8) or emit as separate symbol and then do refer (len 11, dist 20)
+the last one is called LZ non-greedy parsing approach: www.cs.uvic.ca/~nigelh/Publications/LZ-non-greedy.pdf
+http://www.gzip.org/algorithm.txt
+
+
+
+After encoding new russian gfx takes 251 bytes instead of 238 - large difference due to cyrilic glyph complicated form, not because of encoder issues. Even if I delete non-used blank tiles, which are not used as sprite tiles, LZ encoded block stays the same size.
+Let's put it in the end of rom: 0x7F D4 C0 is empty, copy compressed piece there. change pointer at f2a84 to C0 D4 7F 08. We could also store changed gfx at the end of ROM in plain view, but that will require to catch corresponding pointer in code (as that's the only gfx piece in plain view), and add code for plain gfx copy.
+
+It's clear now, we need one more sprite for the last letter in "START" word to display and move whole text to the left for proper centering.
+07000012 is X of left most sprite (0x50) breakpoint at it before sprite appears
+
+debugger> bpw 0x07000010 4
+Added break on write at 07000010 for 4 bytes
+debugger> c
+Breakpoint (on write) address 07000010 old:4050407c new:4050407c
+R00=0300355c R04=00000100 R08=0300347c R12=08003651
+R01=07000000 R05=03001e44 R09=03001d24 R13=03007e34
+R02=84000100 R06=fffffe00 R10=03007e3c R14=08003687
+R03=040000e0 R07=0300347c R11=00000001 R15=080036a8
+CPSR=0000003f (......T Mode: 1f)
+080036a4  c307 stmia r3!, {r0-r2}
+> 080036a6  3b0c sub r3, #0xc
+080036a8  4b22 ldr r3, [$08003734] (=$040000d4)
+
+That's DMA: source in R0: 300355c, destination is R01=07000000
+At 300356e is our X coord
+
+full tracing:
+
+
+R00=00000001 R04=03001e50 R08=0300347c R12=00000000
+R01=03001d28 R05=03001a10 R09=03001d24 R13=03007e3c
+R02=0000fffe R06=fffffe00 R10=03007e3c R14=08003e41
+R03=00000000 R07=0300347c R11=00000001 R15=08003326
+CPSR=2000003f (..C...T Mode: 1f)
+08003324  880a ldrh r2, [r1, #0x0]
+> 08003324  880a ldrh r2, [r1, #0x0]
+08003326  1c03 add r3, r0, #0x0
+debugger> trace once off
+debugger> trace file log.txt
+debugger> trace start
+debugger> c
+R00=00000001 R04=03001e50 R08=0300347c R12=00000000
+R01=03001d28 R05=03001a10 R09=03001d24 R13=03007e3c
+R02=0000fffe R06=fffffe00 R10=03007e3c R14=08003e41
+R03=00000000 R07=0300347c R11=00000001 R15=08003326
+CPSR=2000003f (..C...T Mode: 1f)
+08003324  880a ldrh r2, [r1, #0x0]
+> 08003324  880a ldrh r2, [r1, #0x0]
+08003326  1c03 add r3, r0, #0x0
+debugger> trace stop
+debugger> bpw 07000000
+bpw {address} {size}    Break on write
+debugger> bpw 07000000 4
+Added break on write at 07000000 for 4 bytes
+debugger> c
+Breakpoint (on write) address 07000000 old:4090407c new:4090407c
+R00=0300355c R04=00000100 R08=0300347c R12=08003651
+R01=07000000 R05=03001e44 R09=03001d24 R13=03007e34
+R02=84000100 R06=fffffe00 R10=03007e3c R14=08003687
+R03=040000e0 R07=0300347c R11=00000001 R15=080036a8
+CPSR=0000003f (......T Mode: 1f)
+080036a4  c307 stmia r3!, {r0-r2}
+> 080036a6  3b0c sub r3, #0xc
+080036a8  4b22 ldr r3, [$08003734] (=$040000d4)
+debugger> mb 0300355c
+0300355c 7c 40 90 40 08 00 00 00 7c 40 70 40 04 00 00 00 |@.@....|@p@....
+0300356c 7c 40 50 40 00 00 00 00 c0 00 c0 00 c0 00 c0 00 |@P@............
+0300357c c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+0300358c c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+0300359c c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035ac c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035bc c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035cc c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035dc c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035ec c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035fc c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+0300360c c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+0300361c c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+0300362c c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+0300363c c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+0300364c c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+debugger> bpw 0300356c
+bpw {address} {size}    Break on write
+debugger> bpw 0300356c 4
+Added break on write at 0300356c for 4 bytes
+debugger> c
+Breakpoint (on write) address 0300356c old:4050407c new:4050407c
+R00=03003574 R04=00000000 R08=00000000 R12=00000001
+R01=0000007e R05=00000000 R09=0300355c R13=03007e14
+R02=03001400 R06=00000000 R10=03007e3c R14=03003994
+R03=03003514 R07=4050407c R11=00000001 R15=030039c0
+CPSR=2000001f (..C.... Mode: 1f)
+030039b8  e8a00180 stmia r0!, {r7,r8}
+> 030039bc  e2511001 subs r1, r1, #0x1
+030039c0  0a000008 beq $030039e8
+debugger> mb 03003514
+03003514 08 35 00 03 7c 40 90 40 08 00 00 00 00 00 00 00 .5..|@.@........
+03003524 00 40 00 40 0c 00 00 00 00 00 00 00 00 40 00 40 .@.@.........@.@
+03003534 10 00 00 00 c0 00 c0 00 a0 20 00 40 c0 00 c0 00 ......... .@....
+03003544 a0 20 00 40 c0 00 c0 00 a0 20 00 40 c0 00 c0 00 . .@..... .@....
+03003554 a0 20 00 40 c0 00 c0 00 7c 40 90 40 08 00 00 00 . .@....|@.@....
+03003564 7c 40 70 40 04 00 00 00 7c 40 50 40 00 00 00 00 |@p@....|@P@....
+03003574 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+03003584 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+03003594 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035a4 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035b4 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035c4 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035d4 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035e4 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+030035f4 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+03003604 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 c0 00 ................
+debugger> bpw 03003518 4
+Added break on write at 03003518 for 4 bytes
+debugger> c
+Breakpoint (on write) address 07000000 old:4090407c new:4090407c
+R00=0300355c R04=00000100 R08=0300347c R12=08003651
+R01=07000000 R05=03001e44 R09=03001d24 R13=03007e34
+R02=84000100 R06=fffffe00 R10=03007e3c R14=08003687
+R03=040000e0 R07=0300347c R11=00000001 R15=080036a8
+CPSR=0000003f (......T Mode: 1f)
+080036a4  c307 stmia r3!, {r0-r2}
+> 080036a6  3b0c sub r3, #0xc
+080036a8  4b22 ldr r3, [$08003734] (=$040000d4)
+debugger> c
+Breakpoint (on write) address 0300351a old:4090 new:4090
+R00=080f2ac7 R04=00000090 R08=0300347c R12=000000e0
+R01=fffffe00 R05=03003514 R09=00000e10 R13=03007e64
+R02=00000090 R06=00000002 R10=fffffe00 R14=080f2ac7
+R03=00004090 R07=000000af R11=04000052 R15=080f2aba
+CPSR=0000003f (......T Mode: 1f)
+080f2ab6  80eb strh r3, [r5, #0x6]
+> 080f2ab8  237c mov r3, #0x7c
+080f2aba  712b strb r3, [r5, #0x4]
+
+check this in IDA:
+
+.text:080F2AA4                 MOVS    R4, #0x50 as immediate value for string start - code in rom, responsible for saving our coordinate
+13 symbols in russian string, 30 tiles of screen width, so starting coord = (15 - 6)*8 = 0x48. change 50 to 48 and we're ready.
+.text:080F2ACE                 CMP     spriteCount, #2 ; 3 sprites on screen, change it to 4
+
+
+Now for the PAUSE caption, if you press start. In the beginnign of game, right after you get control over character, 
+at tile viewer we can see that tiles are placed in 06012100,
+place a breakpoint and press start: DMA from 0203917C.
+which is buffer and it's written several times: only once with immediate write to 06012100:command at 03003548
+with source address for data in r0 at 8031f84, but there's a mess instead of gfx.
+Need to analyse code at IWRAM. dump it and disassemble in IDA
+
+full log:
+
+debugger> bpw 0x6012100 4
+Added break on write at 06012100 for 4 bytes
+debugger> c
+Breakpoint (on write) address 06012100 old:00000000 new:00000000
+R00=0203917c R04=84000000 R08=0203917c R12=03001810
+R01=06012100 R05=00002100 R09=02032fbc R13=03007e1c
+R02=84000080 R06=00000200 R10=ffffffe8 R14=03001b10
+R03=040000e0 R07=03001b70 R11=00000003 R15=0800401a
+CPSR=8000003f (N.....T Mode: 1f)
+08004016  c307 stmia r3!, {r0-r2}
+> 08004018  3b0c sub r3, #0xc
+0800401a  0968 lsr r0, r5, #0x05
+debugger> bpw 0x203917c 4
+Added break on write at 0203917c for 4 bytes
+debugger> c
+Breakpoint (on write) address 0203917c old:00 new:00
+R00=0843ef88 R04=030077ff R08=0843ef86 R12=00000000
+R01=0203917d R05=00000096 R09=080367dc R13=03007e24
+R02=84000096 R06=0300347c R10=0203917c R14=5d000000
+R03=00000000 R07=00000015 R11=00000003 R15=03003550
+CPSR=0000001f (....... Mode: 1f)
+03003548  e4c13001 strb r3, [r1], #0x1
+> 0300354c  e1b0e08e movs lr, lr, lsl #0x01
+03003550  3afffffb bcc $03003544
+debugger> c
+Breakpoint (on write) address 0203917d old:00 new:04
+R00=0843ef89 R04=030077ff R08=0843ef86 R12=00000000
+R01=0203917e R05=00000096 R09=080367dc R13=03007e24
+R02=84000096 R06=0300347c R10=0203917c R14=ba000000
+R03=00000004 R07=00000015 R11=00000003 R15=03003550
+CPSR=8000001f (N...... Mode: 1f)
+03003548  e4c13001 strb r3, [r1], #0x1
+> 0300354c  e1b0e08e movs lr, lr, lsl #0x01
+03003550  3afffffb bcc $03003544
+debugger> c
+....
+
+debugger> c
+Breakpoint (on write) address 0203917c old:00 new:00
+R00=0843ef88 R04=030077ff R08=0843ef86 R12=03001810
+R01=0203917d R05=00000096 R09=00000000 R13=03007ddc
+R02=84000096 R06=0300347c R10=0203917c R14=5d000000
+R03=00000000 R07=00000015 R11=02038b54 R15=03003550
+CPSR=0000001f (....... Mode: 1f)
+03003548  e4c13001 strb r3, [r1], #0x1
+> 0300354c  e1b0e08e movs lr, lr, lsl #0x01
+03003550  3afffffb bcc $03003544
+debugger> dsave pauseCode.bin 0x03000000 0xdeadbeef //VBA-SDL-H bug, cut 0x8000 from dump later
+debugger> mb 03003548
+03003548 01 30 c1 e4 8e e0 b0 e1 fb ff ff 3a c9 ff ff 0a .0.........:....
+03003558 01 c0 d0 e4 01 30 d0 e4 f0 20 0c e2 01 30 63 e0 .....0... ...0c.
+03003568 02 42 43 e0 0f c0 1c e2 26 00 00 0a 0f c0 6c e2 .BC.....&.....l.
+03003578 8c f1 8f e0 00 00 a0 e1 01 30 d4 e4 01 30 c1 e4 .........0...0..
+03003588 01 30 d4 e4 01 30 c1 e4 01 30 d4 e4 01 30 c1 e4 .0...0...0...0..
+03003598 01 30 d4 e4 01 30 c1 e4 01 30 d4 e4 01 30 c1 e4 .0...0...0...0..
+030035a8 01 30 d4 e4 01 30 c1 e4 01 30 d4 e4 01 30 c1 e4 .0...0...0...0..
+030035b8 01 30 d4 e4 01 30 c1 e4 01 30 d4 e4 01 30 c1 e4 .0...0...0...0..
+030035c8 01 30 d4 e4 01 30 c1 e4 01 30 d4 e4 01 30 c1 e4 .0...0...0...0..
+030035d8 01 30 d4 e4 01 30 c1 e4 01 30 d4 e4 01 30 c1 e4 .0...0...0...0..
+030035e8 01 30 d4 e4 01 30 c1 e4 01 30 d4 e4 01 30 c1 e4 .0...0...0...0..
+030035f8 01 30 d4 e4 01 30 c1 e4 8e e0 b0 e1 ce ff ff 3a .0...0.........:
+03003608 9c ff ff 0a d1 ff ff ea 01 00 54 e1 2b 00 00 0a ..........T.+...
+03003618 01 30 d0 e4 10 30 83 e2 0f c0 03 e2 0f c0 6c e2 .0...0........l.
+03003628 8c f1 8f e0 00 00 a0 e1 01 20 d4 e4 01 20 c1 e4 ......... ... ..
+03003638 01 20 d4 e4 01 20 c1 e4 01 20 d4 e4 01 20 c1 e4 . ... ... ... ..
+
+Analysis shows, that decompression routine is the same as previous one, but code is copied from ROM to another location: 300347c instead of 300355c.
+Anyhow, from tracing we've discovered, that uncompress routine is called from here:
+080072FC 4730 bx r6                               R00=0843f246 R01=0203917c ...
+0300347C e92d40e2 stmfd sp!, {r1,r5-r7,lr}        R00=0843f246 R01=0203917c ...
+
+R00 - is an srcPtr. Let's trace pointer to pause caption. Both VBA-SDL-H and no$gba has issues with break at code in IWRAM (you need to break at the point when code is already loaded into IWRAM and then put a breakpoint on that code), so we'll use conditional breakpoints (available only at VBA-SDL-H2):
+break at ROM 080072FC at the moment when it will be ready to jump to 0300347C only (R06 will have this value). 
+
+
+debugger> bpw 06012100
+At 06012100, Break Always on    Write
+debugger> bx 080072fc if r6 == 0x0300347c
+Added break on address 080072fc, ending with condition:
+r6 == 0x0300347c
+debugger> c
+Breakpoint (on Thumb) address 080072fc
+R00=0843ef86 R04=030077ff R08=0843ef86 R12=03001810
+R01=0203917c R05=00000096 R09=00000000 R13=03007df0
+R02=84000096 R06=0300347c R10=0203917c R14=08005419
+R03=040000d4 R07=00000015 R11=02038b54 R15=080072fe
+CPSR=2000003f (..C...T Mode: 1f)
+08005416  ff72 blh $0ee4
+> 080072fc  4730 bx r6
+080072fe  46c0 mov r8, r8
+debugger> c
+Breakpoint (on Thumb) address 080072fc
+R00=0843f0e6 R04=030077ff R08=0843f0e6 R12=03001810
+R01=0203917c R05=00000096 R09=00000000 R13=03007df0
+R02=84000096 R06=0300347c R10=0203917c R14=08005419
+R03=040000d4 R07=00000016 R11=02038b54 R15=080072fe
+CPSR=2000003f (..C...T Mode: 1f)
+08005416  ff72 blh $0ee4
+> 080072fc  4730 bx r6
+080072fe  46c0 mov r8, r8
+debugger> c
+Breakpoint (on Thumb) address 080072fc
+R00=0843f246 R04=030077ff R08=0843f246 R12=03001810
+R01=0203917c R05=00000096 R09=00000000 R13=03007df0
+R02=84000096 R06=0300347c R10=0203917c R14=08005419
+R03=040000d4 R07=00000017 R11=02038b54 R15=080072fe
+CPSR=2000003f (..C...T Mode: 1f)
+08005416  ff72 blh $0ee4
+> 080072fc  4730 bx r6
+080072fe  46c0 mov r8, r8
+debugger> c
+Breakpoint (on Thumb) address 080072fc
+R00=08031f82 R04=030077ff R08=08031f82 R12=03001810//R00 has pointer
+R01=0203917c R05=00000096 R09=02032fbc R13=03007e1c
+R02=84000096 R06=0300347c R10=0203917c R14=08005419
+R03=040000d4 R07=00000018 R11=00000003 R15=080072fe
+CPSR=2000003f (..C...T Mode: 1f)
+08005416  ff72 blh $0ee4
+> 080072fc  4730 bx r6
+080072fe  46c0 mov r8, r8
+debugger> c
+Breakpoint (on write) address 06012100 old:00000000 new:00000000//previous write to buffer was PAUSE gfx decompress
+R00=0203917c R04=84000000 R08=0203917c R12=03001810
+R01=06012100 R05=00002100 R09=02032fbc R13=03007e1c
+R02=84000080 R06=00000200 R10=ffffffe8 R14=03001b10
+R03=040000e0 R07=03001b70 R11=00000003 R15=0800401a
+CPSR=8000003f (N.....T Mode: 1f)
+08004016  c307 stmia r3!, {r0-r2}
+> 08004018  3b0c sub r3, #0xc
+0800401a  0968 lsr r0, r5, #0x05
+
+So, decompress with our tool from offset 0x31f82 in ROM and voila, we have our graphics
+let's see how pointer to compressed block is loaded. The easiest way is to dump a tracing log, we now know our pointer to compressed block value:
+
+
+debugger> bx 080072fc if r0 == 0x8031f82
+Added break on address 080072fc, ending with condition:
+r0 == 0x8031f82
+debugger> trace once off
+debugger> trace start
+debugger> c                                          //here I quickly switch to game and press start rapidly, so log file will not grow too large
+Breakpoint (on Thumb) address 080072fc
+R00=08031f82 R04=030077ff R08=08031f82 R12=03001810  //OK, desired point with pointer already loaded and whole process is in trace log
+R01=0203917c R05=00000096 R09=02032fbc R13=03007e1c
+R02=84000096 R06=0300347c R10=0203917c R14=08005419
+R03=040000d4 R07=00000018 R11=00000003 R15=080072fe
+CPSR=2000003f (..C...T Mode: 1f)
+08005416  ff72 blh $0ee4
+> 080072fc  4730 bx r6
+080072fe  46c0 mov r8, r8
+debugger> trace stop
+
+In the log file we trace this address downside up and easily see where it is loaded from:
+
+080215F0 4b0a ldr r3, [$0802161c] (=$08031864)    R00=0203917c R01=080215f1 R02=0203957c R03=02040000 R04=03001e50 R05=00000006 //start address of ptr table
+080215F2 00ad lsl r5, r5, #0x02                   R00=0203917c R01=080215f1 R02=0203957c R03=08031864 R04=03001e50 R05=00000006 //r5 has block number, shl 2, as pointer takes 4 bytes
+080215F4 1c06 add r6, r0, #0x0                    R00=0203917c R01=080215f1 R02=0203957c R03=08031864 R04=03001e50 R05=00000018 
+080215F6 5958 ldr r0, [r3, r5]                    R00=0203917c R01=080215f1 R02=0203957c R03=08031864 R04=03001e50 R05=00000018 //get actual pointer to compressed block
+
+So, in general 0x31864 has pointer table with 32 bit pointers, and as first pointer has value of 0x08031884 table is 0x20 bytes long with 8 entries in it.
+
+
+
+-----------------------------Text-------------------------------------------
+
+In general, it's always useful to dump all RAM and search (relative) for a particular phrase, which is now displayed by game.
+In Golden Sun case, I've searched for ASCII string and relative and got nothing.
+Great opportunity to find text starting from video buffer:
+
+06010480 - upper part of P in Please dear wake up
+
+dma from 3007d08
+put a breakpoint on that and break at 08017a14, 
+
+debugger> bpw 03007d08 4
+Added break on write at 03007d08 for 4 bytes
+debugger> c
+R00=00000001 R04=03001e50 R08=02032abc R12=00000020
+R01=03001d28 R05=03001a10 R09=03001d24 R13=03007e24
+R02=0000fffe R06=00000000 R10=03007e24 R14=08003e41
+R03=00000000 R07=02032abc R11=00000001 R15=08003326
+CPSR=2000003f (..C...T Mode: 1f)
+08003324  880a ldrh r2, [r1, #0x0]
+> 08003324  880a ldrh r2, [r1, #0x0]
+08003326  1c03 add r3, r0, #0x0
+debugger> c
+Breakpoint (on write) address 03007d08 old:00000000 new:00000000
+R00=03007d0c R04=00000000 R08=0000000c R12=08032bc2
+R01=03007b57 R05=00000000 R09=00000001 R13=03007b54
+R02=00000000 R06=00000000 R10=00000004 R14=080179ed
+R03=00000000 R07=08032ba6 R11=0000000f R15=08017a16
+CPSR=a000003f (N.C...T Mode: 1f)
+08017a12  c004 stmia r0!, {r2}
+> 08017a14  3401 add r4, #0x1
+08017a16  1c03 add r3, r0, #0x0
+debugger> trace once off
+debugger> trace start
+debugger> c
+
+...
+
+Breakpoint (on write) address 03007d08 old:00000000 new:00000000
+R00=03007d0c R04=00000000 R08=00000003 R12=080323c2
+R01=03007b57 R05=00000000 R09=00000001 R13=03007b54
+R02=00000000 R06=00000000 R10=00000000 R14=08017965
+R03=00000000 R07=080323a6 R11=0000000f R15=08017a16
+CPSR=a000003f (N.C...T Mode: 1f)
+08017a12  c004 stmia r0!, {r2}
+> 08017a14  3401 add r4, #0x1
+08017a16  1c03 add r3, r0, #0x0
+debugger> trace stop
+
+
+see how gfx is copied from rom: game has VWF, so procedure is painful to analyse - let's just look at registers:
+looks like each time we break at this place new portion of drawn string is copied to VRAM, and r7 changes a little bit somewhere around ~8032ac6
+The guess is that here in ROM we will have our font is true - look at this place in Tile Editor in 2bpp planar mode with width at 1 tile, and we've got ingame font along with width table starting from around ~32226.
+Anyhow now we can trace command, which loads r7 between two sequental writes to 3007d08 and find text
+
+
+080178F4 881b ldrh r3, [r3, #0x0]                 R00=00000ea4 R01=00000000 R02=00000eae R03=0203396a R04=00000000 R05=0000002c R06=02032abc R07=02032fbc 
+080178F6 2001 mov r0, #0x1                        R00=00000ea4 R01=00000000 R02=00000eae R03=0000000f R04=00000000 R05=0000002c R06=02032abc R07=02032fbc 
+080178F8 4681 mov r9, r0                          R00=00000001 R01=00000000 R02=00000eae R03=0000000f R04=00000000 R05=0000002c R06=02032abc R07=02032fbc 
+080178FA 469b mov r11, r3                         R00=00000001 R01=00000000 R02=00000eae R03=0000000f R04=00000000 R05=0000002c R06=02032abc R07=02032fbc 
+080178FC 1c2b add r3, r5, #0x0                    R00=00000001 R01=00000000 R02=00000eae R03=0000000f R04=00000000 R05=0000002c R06=02032abc R07=02032fbc //r3 = 0f is hardcoded, need to trace r5
+080178FE 3b20 sub r3, #0x20                       R00=00000001 R01=00000000 R02=00000eae R03=0000002c R04=00000000 R05=0000002c R06=02032abc R07=02032fbc 
+08017900 4a54 ldr r2, [$08017a54] (=$08032224)    R00=00000001 R01=00000000 R02=00000eae R03=0000000c R04=00000000 R05=0000002c R06=02032abc R07=02032fbc //08032224 - start of font
+08017902 015b lsl r3, r3, #0x05                   R00=00000001 R01=00000000 R02=08032224 R03=0000000c R04=00000000 R05=0000002c R06=02032abc R07=02032fbc 
+08017904 189f add r7, r3, r2                      R00=00000001 R01=00000000 R02=08032224 R03=00000180 R04=00000000 R05=0000002c R06=02032abc R07=02032fbc 
+08017906 883b ldrh r3, [r7, #0x0]                 R00=00000001 R01=00000000 R02=08032224 R03=00000180 R04=00000000 R05=0000002c R06=02032abc R07=080323a4 
+08017908 4853 ldr r0, [$08017a58] (=$00000eac)    R00=00000001 R01=00000000 R02=08032224 R03=00000003 R04=00000000 R05=0000002c R06=02032abc R07=080323a4 
+
+r2 is a pointer to font start in ROM, r5 - is loaded from somewhere. Moreover, r7 at the end points to comma symbol (we can see this in tile editor) and r5 holds ASCII code for comma. Let's trace it:
+after few register transfers and stack push/pops we come to
+
+08016986 5ae7 ldsb r7, [r4, r3]                   R00=0000020c R01=03001ae8 R02=00000eb0 R03=00000f10 R04=02032abc R05=03001d24 R06=020330dc R07=00000000 
+08016988 2f1e cmp r7, #0x1e                       R00=0000020c R01=03001ae8 R02=00000eb0 R03=00000f10 R04=02032abc R05=03001d24 R06=020330dc R07=00000077 
+
+interesting...
+debugger> mb 020339cc
+020339cc 77 00 61 00 6b 00 65 00 20 00 75 00 70 00 21 00 w.a.k.e. .u.p.!.
+020339dc 02 00 00 00 50 00 6c 00 65 00 61 00 73 00 65 00 ....P.l.e.a.s.e.
+020339ec 2c 00 20 00 64 00 65 00 61 00 72 00 2c 00 20 00 ,. .d.e.a.r.,. .
+020339fc 77 00 61 00 6b 00 65 00 20 00 75 00 70 00 21 00 w.a.k.e. .u.p.!.
+02033a0c 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+02033a1c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+02033a2c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+02033a3c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+02033a4c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+Gotcha! Now I see that text is stored in unicode, takes 2 bytes and could be easily found by hex editor, which supports byte skip (like hexpose). Anyway, now we know RAM buffer, which is filled by some decoding function. Let's dig deeper:
+020339b0 has P letter (in "Please" word) code: 0x50. let's trace where it comes from
+
+debugger> bpw 020339b0 2
+Added break on write at 020339b0 for 2 bytes
+debugger> trace start
+debugger> c
+Breakpoint (on write) address 020339b0 old:0000 new:0050
+R00=000001ff R04=080374c4 R08=0203396c R12=00000001
+R01=00000000 R05=0203396c R09=0300347c R13=03007da8
+R02=000012fa R06=00000023 R10=03007de0 R14=080180cf
+R03=00000044 R07=00000050 R11=00000001 R15=08018288
+CPSR=4000003f (.Z....T Mode: 1f)
+08018284  535f strh r7, [r3, r5]
+> 08018286  4006 and r6, r0
+08018288  910a str r1, [sp, #0x28]
+debugger> trace stop
+
+From tracing log it becomes obvious, that letter code is formed somewhere near
+030035A0 31a01205 movcc r1, r5, lsl #0x04         R00=03007de0 R01=00000011 R02=08040e60 R03=00000004 R04=080374c4 R05=00000005 R06=00000000
+030035A4 31811226 orrcc r1, r1, r6, lsr #0x04     R00=03007de0 R01=00000050 R02=08040e60 R03=00000004 R04=080374c4 R05=00000005 R06=00000000
+
+Need to analyse this function - as usual we'll do a dump of WRAM via 'dsave textCode.bin 0x03000000 0xdeadbeef' and open it with IDA.
+From log file it's also easy to see entry point of our decoding function and exit from it.
+
+Analysis shows, that this each character has separate huffman tree. Actual text is a plain path in corresponding tree. Each iteration function returns a character based on a pass on previous char's huffman tree. Usually full text characters are counted for probabilities, one large tree is created and text is encoded based on that overall tree. For instance, both Battletoads games on NES has this scheme. Large tree has accordingly larger average bits per character. In case of Golden Sun, there is a bunch of small trees, which have separately smaller alphabet (script doesn't have syllable "zr", so you don't need to include char "r" in "z"'s Huffman tree). And that leads to higher probabilities of concrete chars, which now can be encoded in less bits. That leads to overall text size decrease. Of course, you'll need to store all these trees, but in case of half a megabyte script, that's acceptable: text size decrease is more than trees size increase.
+
+So, if that's the first symbol, previous char is considered zero. let's build a tree of "no previous char" situation.
+ROM:03003484                 LDR     treeBitStream, =0x803842C
+ROM:03003488                 MOV     treePtr, R1,LSR#8
+ROM:0300348C                 ADD     treeBitStream, treeBitStream, treePtr,LSL#3
+ROM:03003490                 LDMIA   treeBitStream, {treePtr,R5} ; r4 = 0x08037464 (@803842c) 
+ROM:03003490                                  			 ; r5=  0x08038334 (@8038430)
+ROM:03003494                 AND     treeBitStream, R1, #0xFF ; clear high byte of previous char code
+ROM:03003498                 ADD     treeBitStream, treeBitStream, treeBitStream ; char*2, as each offset is 16 bit
+ROM:0300349C                 LDRH    R5, [R5,treeBitStream] ; load offset of corresponding previously decoded char
+ROM:030034A0                 ADD     treePtr, treePtr, R5 ; and position in iter bitstream
+
+So, 3842c in ROM contains 2 pointers: 08037464 - start address of trees structures table, and 08038334 - 16 bit offset table of each char in iter bitstream. You can easily identify 16 bit pointer table in byte array, so visually, we have 7b entries @38334-3842b and then go our two main pointers at 3842c. So we have 123 characters. 37464 is a start offset of tree table, which ends right before offset table at 38334, so all character trees take only 0xED0 bytes. For half a megabyte script, that size is uncomparable with text size reduction. From code analysis we can also see the tree structure: each consists of char codes, stored in 12 bits (1,5 byte) and binary tree right after them. 
+374BB is also a start address for a zero character tree structure. For zero previous character, offset, stored in table at 38334 is also a size of 12 bits characters table before appropriate tree structure. First offset in 38334 is 0x0057, so 0x0057*8/12 = 0x3A (dec 58) characters are stored and addressed in the first tree.
+Actual binary trees are stored in pre-order traversal. In a tree bitstream 0 bit means, this is a node, 1 -- this is a leaf. Nodes are also numbered zero-based, in pre-order sequence. Start offset of the binary tree for zero character is 37464 + 57 = 374BB.  Now we can rebuild it and it will look like that:
+
+--o--o--o-[0]
+  |  |  |
+  |  |  `--o--o-[1]
+  |  |     |  |
+  |  |     |  `--o--o-[2]
+  |  |     |     |  |
+  |  |     |     |  `--o--o-[3]
+  |  |     |     |     |  |
+  |  |     |     |     |  `--o-[4]
+  |  |     |     |     |     |
+  |  |     |     |     |     `-[5]
+  |  |     |     |     |
+  |  |     |     |     `-[6]
+  |  |     |     |
+  |  |     |     `-[7]
+  |  |     |
+  |  |     `--o-[8]
+  |  |        |
+  |  |        `--o--o-[9]
+  |  |           |  |
+  |  |           |  `-[1o]
+  |  |           |
+  |  |           `-[11]
+  |  |
+  |  `--o--o-[12]
+  |     |  |
+  |     |  `--o-[13]
+  |     |     |
+  |     |     `-[14]
+  |     |
+  |     `-[15]
+  |
+  `--o--o--o--o--o-[16]
+     |  |  |  |  |
+     |  |  |  |  `-[17]
+     |  |  |  |
+     |  |  |  `--o--o-[18]
+     |  |  |     |  |
+     |  |  |     |  `--o--o--o--o--o-[19]
+     |  |  |     |     |  |  |  |  |
+     |  |  |     |     |  |  |  |  `-[2o]
+     |  |  |     |     |  |  |  |
+     |  |  |     |     |  |  |  `--o-[21]
+     |  |  |     |     |  |  |     |
+     |  |  |     |     |  |  |     `-[22]
+     |  |  |     |     |  |  |
+     |  |  |     |     |  |  `--o--o--o-[23]
+     |  |  |     |     |  |     |  |  |
+     |  |  |     |     |  |     |  |  `-[24]
+     |  |  |     |     |  |     |  |
+     |  |  |     |     |  |     |  `--o-[25]
+     |  |  |     |     |  |     |     |
+     |  |  |     |     |  |     |     `-[26]
+     |  |  |     |     |  |     |
+     |  |  |     |     |  |     `--o--o-[27]
+     |  |  |     |     |  |        |  |
+     |  |  |     |     |  |        |  `-[28]
+     |  |  |     |     |  |        |
+     |  |  |     |     |  |        `--o-[29]
+     |  |  |     |     |  |           |
+     |  |  |     |     |  |           `-[3o]
+     |  |  |     |     |  |
+     |  |  |     |     |  `--o-[31]
+     |  |  |     |     |     |
+     |  |  |     |     |     `-[32]
+     |  |  |     |     |
+     |  |  |     |     `-[33]
+     |  |  |     |
+     |  |  |     `-[34]
+     |  |  |
+     |  |  `-[35]
+     |  |
+     |  `--o--o-[36]
+     |     |  |
+     |     |  `--o--o--o-[37]
+     |     |     |  |  |
+     |     |     |  |  `--o--o--o-[38]
+     |     |     |  |     |  |  |
+     |     |     |  |     |  |  `--o--o-[39]
+     |     |     |  |     |  |     |  |
+     |     |     |  |     |  |     |  `-[4o]
+     |     |     |  |     |  |     |
+     |     |     |  |     |  |     `-[41]
+     |     |     |  |     |  |
+     |     |     |  |     |  `-[42]
+     |     |     |  |     |
+     |     |     |  |     `--o-[43]
+     |     |     |  |        |
+     |     |     |  |        `--o-[44]
+     |     |     |  |           |
+     |     |     |  |           `--o-[45]
+     |     |     |  |              |
+     |     |     |  |              `-[46]
+     |     |     |  |
+     |     |     |  `--o-[47]
+     |     |     |     |
+     |     |     |     `-[48]
+     |     |     |
+     |     |     `-[49]
+     |     |
+     |     `-[5o]
+     |
+     `--o-[51]
+        |
+        `--o--o--o-[52]
+           |  |  |
+           |  |  `-[53]
+           |  |
+           |  `-[54]
+           |
+           `--o--o-[55]
+              |  |
+              |  `-[56]
+              |
+              `-[57]
+
+exactly 58 leafs, as we have in the 12 bits table before tree. So in general, text crawls right on this tree, meaning 0 - branch left, 1 - branch right until we hit a leaf. Leaf's number is an index in 12 bits table before tree. Index is counted backward from a tree start. For instance text bitstream like b11111 will give us index 57, which is 58*12/8 = 87 bytes away from the tree start (i.e. the beginning of trees structures table 0x37464)
+
+
+
+
+_______________________________________________________FRAME WIDTH________________________________________________________________________
+In Russian version word copy consists of 10 symbols, and frame for this word, which we find on the title screen gets redrawn by actual symbols. Let's fix that. If you have no link battle option available (4 items in menu), in viewer you will see, that frame and symbols of word are part of tile map of BG0. the actual problem tile is at address 60024B4. To find frame draw routine, we'll jump from copy to erase string in game (because erase in russian is short enough not to overwrite the frame) and see what writes 0x17th tile to the map:
+
+debugger> bw 060024b4
+At 060024b4, Break Always on    Write
+debugger> trace once off
+debugger> trace start
+debugger> c
+Breakpoint (on write) address 060024b4 old:f000f0c9 new:f000f017
+R00=02032ebc R04=00000001 R08=020367bc R12=06002400
+R01=06002400 R05=02032ebc R09=03001d24 R13=03007be4
+R02=84000040 R06=00000100 R10=03007c0c R14=00000001
+R03=040000e0 R07=02032abc R11=00000001 R15=0801614a
+CPSR=0000003f (......T Mode: 1f)
+08016146  c307 stmia r3!, {r0-r2}
+> 08016148  3b0c sub r3, #0xc
+0801614a  0864 lsr r4, r4, #0x01
+debugger> mh 02032ebc
+02032ebc f000 f000 f000 f000 f000 f000 f000 f000 ................
+02032ecc f000 f000 f000 f000 f000 f000 f000 f000 ................
+02032edc f000 f000 f000 f000 f000 f000 f000 f000 ................
+02032eec f000 f000 f000 f000 f000 f000 f000 f000 ................
+02032efc f000 f000 f000 f000 f000 f000 f000 f000 ................
+02032f0c f000 f000 f000 f000 f000 f000 f000 f000 ................
+02032f1c f000 f000 f010 f011 f011 f011 f011 f011 ................
+02032f2c f011 f011 f012 f000 f000 f000 f000 f000 ................
+02032f3c f000 f000 f000 f000 f000 f000 f000 f000 ................
+02032f4c f000 f000 f000 f000 f000 f000 f000 f000 ................
+02032f5c f000 f000 f016 f0ca f0cb f0cc f0cd f0ce ................
+02032f6c f0cf f020 f017 f000 f000 f000 f000 f000 .. .............
+02032f7c f000 f000 f000 f000 f000 f000 f000 f000 ................
+02032f8c f000 f000 f000 f000 f000 f000 f000 f000 ................
+02032f9c f000 f000 f013 f014 f014 f014 f014 f014 ................
+02032fac f014 f014 f015 f000 f000 f000 f000 f000 ................
+
+OK, so the frame is copied via DMA. start of frame is 02032ebc, in VRAM - 06002400. Tile has offset b4, so it's  02032ebc+b4= 02032f70, which we also clearly see on the memory hexview.
+debugger> bpw 02032f70 2
+Added break on write at 02032f70 for 2 bytes
+debugger> trace once off
+debugger> trace start
+debugger> c
+Breakpoint (on write) address 02032f70 old:f09d new:f017
+R00=02032f70 R04=00000007 R08=00000009 R12=000000ff
+R01=080171b9 R05=02032f70 R09=0000002e R13=03007c08
+R02=81000007 R06=00000002 R10=00000007 R14=080171b9
+R03=0000f017 R07=00000002 R11=02032abc R15=080171d2
+CPSR=0000003f (......T Mode: 1f)
+080171ce  802b strh r3, [r5, #0x0]
+> 080171d0  3502 add r5, #0x2
+080171d2  444d add r5, r9
+debugger> trace stop
+
+from log:
+
+080171CA 4b07 ldr r3, [$080171e8] (=$0000f017)    R00=02032f70 R01=080171b9 R02=81000007 R03=0000000e 
+080171CC 3601 add r6, #0x1                        R00=02032f70 R01=080171b9 R02=81000007 R03=0000f017 
+080171CE 802b strh r3, [r5, #0x0]                 R00=02032f70 R01=080171b9 R02=81000007 R03=0000f017 
+
+Analysis showed that subroutine 080170f8 used for every frame draw in the game, and R2 is passed with width. From log file:
+0801649A 8984 ldrh r4, [r0, #0xc]                 R00=02032fbc R01=020367bc R02=00000003 R03=00000000 R04=00000378 
+0801649C 89c1 ldrh r1, [r0, #0xe]                 R00=02032fbc R01=020367bc R02=00000003 R03=00000000 R04=00000012 
+0801649E 8902 ldrh r2, [r0, #0x8]                 R00=02032fbc R01=00000011 R02=00000003 R03=00000000 R04=00000012 
+080164A0 8943 ldrh r3, [r0, #0xa]                 R00=02032fbc R01=00000011 R02=00000009 R03=00000000 R04=00000012 
+080164A2 1c20 add r0, r4, #0x0                    R00=02032fbc R01=00000011 R02=00000009 R03=00000003 R04=00000012 
+080164A4 f000 bl $080170f8                        R00=00000012 R01=00000011 R02=00000009 R03=00000003 R04=00000012 
+080164A6 fe28 blh $0c50                           R00=00000012 R01=00000011 R02=00000009 R03=00000003 R04=00000012 
+080170F8 b5e0 push {r5-r7,lr}                     R00=00000012 R01=00000011 R02=00000009 R03=00000003 R04=00000012 
+
+width is stored 02032fbc+8=02032fc4. this is filled right after we press start at the mountain screen. Let's catch that.
+
+debugger> bpw 02032fc4 1
+Added break on write at 02032fc4 for 1 bytes
+debugger> c
+Breakpoint (on write) address 02032fc4 old:00000000 new:0000000
+R00=02032fe0 R04=00000000 R08=00000000 R12=00000000
+R01=02012180 R05=00000000 R09=00000000 R13=03007e54
+R02=00005e00 R06=00000000 R10=0809f1b0 R14=0800fae5
+R03=00000000 R07=00000000 R11=0809f1a8 R15=030013bc
+CPSR=2000001f (..C.... Mode: 1f)
+030013b4  e8a013f8 stmia r0!, {r3-r9,r12}
+> 030013b8  e8b113f8 ldmia r1!, {r3-r9,r12}
+030013bc  e8a013f8 stmia r0!, {r3-r9,r12}
+debugger> trace once off
+debugger> trace start
+debugger> c
+Breakpoint (on write) address 02032fc4 old:00000000 new:0000000
+R00=03007e98 R04=02032abc R08=02030000 R12=03001810
+R01=02032abc R05=03007e98 R09=050001c0 R13=03007e98
+R02=850004bf R06=00000002 R10=0809f1b0 R14=08015f3d
+R03=040000e0 R07=00000000 R11=0809f1a8 R15=08015f50
+CPSR=0000003f (......T Mode: 1f)
+08015f4c  c307 stmia r3!, {r0-r2}
+> 08015f4e  3b0c sub r3, #0xc
+08015f50  4b13 ldr r3, [$08015fa0] (=$00000ea3)
+debugger> c
+Breakpoint (on write) address 02032fc4 old:0000 new:0009
+R00=00000012 R04=02032fbc R08=00000000 R12=00000009
+R01=00000000 R05=02032fbc R09=0203684a R13=03007c20
+R02=00000009 R06=00000002 R10=00000011 R14=00000003
+R03=00000003 R07=00000011 R11=00000010 R15=0801632a
+CPSR=6000003f (.ZC...T Mode: 1f)
+08016326  812a strh r2, [r5, #0x8]
+> 08016328  816b strh r3, [r5, #0xa]
+0801632a  4642 mov r2, r8
+debugger> trace stop
+
+From log file:
+08016326 812a strh r2, [r5, #0x8]                 R00=00000012 R01=00000000 R02=00000009 R03=00000003 R04=02032fbc R05=02032fbc
+
+search up
+08028882 5e5a ldsh r2, [r3, r1]                   R00=00000012 R01=00000000 R02=0203680c R03=0203684c
+
+and finally
+08028A70 2107 mov r1, #0x7                        R00=00000011 R01=00000018 R02=00000000 R03=00000000 R04=03001e50 R05=00000001 
+08028A72 2200 mov r2, #0x0                        R00=00000011 R01=00000007 R02=00000000 R03=00000000 R04=03001e50 R05=00000001 
+08028A74 f7ff bl $08028808                        R00=00000011 R01=00000007 R02=00000000 R03=00000000 R04=03001e50 R05=00000001 
+08028A76 fec8 blh $0d90                           R00=00000011 R01=00000007 R02=00000000 R03=00000000 R04=03001e50 R05=00000001 
+08028808 b5e0 push {r5-r7,lr}                     R00=00000011 R01=00000007 R02=00000000 R03=00000000 R04=03001e50 R05=00000001 
+0802880A 4657 mov r7, r10                         R00=00000011 R01=00000007 R02=00000000 R03=00000000 R04=03001e50 R05=00000001 
+0802880C 464e mov r6, r9                          R00=00000011 R01=00000007 R02=00000000 R03=00000000 R04=03001e50 R05=00000001 
+0802880E 4645 mov r5, r8                          R00=00000011 R01=00000007 R02=00000000 R03=00000000 R04=03001e50 R05=00000001 
+08028810 b4e0 push {r5-r7}                        R00=00000011 R01=00000007 R02=00000000 R03=00000000 R04=03001e50 R05=02030000 
+08028812 4b24 ldr r3, [$080288a4] (=$03001f38)    R00=00000011 R01=00000007 R02=00000000 R03=00000000 R04=03001e50 R05=02030000 
+08028814 681f ldr r7, [r3, #0x0]                  R00=00000011 R01=00000007 R02=00000000 R03=03001f38 R04=03001e50 R05=02030000 
+08028816 2390 mov r3, #0x90                       R00=00000011 R01=00000007 R02=00000000 R03=03001f38 R04=03001e50 R05=02030000 
+08028818 19db add r3, r3, r7                      R00=00000011 R01=00000007 R02=00000000 R03=00000090 R04=03001e50 R05=02030000 
+0802881A 4698 mov r8, r3                          R00=00000011 R01=00000007 R02=00000000 R03=0203684c R04=03001e50 R05=02030000 
+0802881C 1c3b add r3, r7, #0x0                    R00=00000011 R01=00000007 R02=00000000 R03=0203684c R04=03001e50 R05=02030000 
+0802881E 4682 mov r10, r0                         R00=00000011 R01=00000007 R02=00000000 R03=020367bc R04=03001e50 R05=02030000 
+08028820 3102 add r1, #0x2                        R00=00000011 R01=00000007 R02=00000000 R03=020367bc R04=03001e50 R05=02030000 
+08028822 4645 mov r5, r8                          R00=00000011 R01=00000009 R02=00000000 R03=020367bc R04=03001e50 R05=02030000 
+08028824 3392 add r3, #0x92                       R00=00000011 R01=00000009 R02=00000000 R03=020367bc R04=03001e50 R05=0203684c 
+08028826 8029 strh r1, [r5, #0x0]                 R00=00000011 R01=00000009 R02=00000000 R03=0203684e R04=03001e50 R05=0203684c 
+
+so we change 28a70 in ROM from 07 to 08 and voila.
+
+(for psynergy width is loaded from 020348c8 == 08 08021ED8 2208 mov r2, #0x8  21ED8 change to 09)
+
+
+------------The first match in arena-----------------------------------------
+The first match gfx:
+
+in VRAM 06014380 dma from 0203ddcc
+buffer is filled by 
+
+Breakpoint (on write) address 0203ddcc old:00 new:00
+R00=08434fea R04=00000007 R08=08434ca8 R12=00000003
+R01=0203ddcc R05=00000001 R09=0203d94c R13=03007e38
+R02=0012ab41 R06=0000023f R10=0203d92c R14=03003588
+R03=00002556 R07=00000000 R11=00000010 R15=030035c8
+CPSR=2000001f (..C.... Mode: 1f)
+030035c0  e5e17001 strbt r7, [r1, #0x1]!
+> 030035c4  e2555001 subs r5, r5, #0x1
+030035c8  1afffff9 bne $030035b4
+
+Which is yet another compression scheme
+
+sub_300347C - start
+30036bc exit
+
+
+
+
+
+
+
+
+
+
