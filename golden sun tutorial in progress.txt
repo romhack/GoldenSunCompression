@@ -516,9 +516,22 @@ ROM:03003498                 ADD     treeBitStream, treeBitStream, treeBitStream
 ROM:0300349C                 LDRH    R5, [R5,treeBitStream] ; load offset of corresponding previously decoded char
 ROM:030034A0                 ADD     treePtr, treePtr, R5 ; and position in iter bitstream
 
-So, 3842c in ROM contains 2 pointers: 08037464 - start address of trees structures table, and 08038334 - 16 bit offset table of each char in iter bitstream. You can easily identify 16 bit pointer table in byte array, so visually, we have 7b entries @38334-3842b and then go our two main pointers at 3842c. So we have 123 characters. 37464 is a start offset of tree table, which ends right before offset table at 38334, so all character trees take only 0xED0 bytes. For half a megabyte script, that size is uncomparable with text size reduction. From code analysis we can also see the tree structure: each consists of char codes, stored in 12 bits (1,5 byte) and binary tree right after them. 
-374BB is also a start address for a zero character tree structure. For zero previous character, offset, stored in table at 38334 is also a size of 12 bits characters table before appropriate tree structure. First offset in 38334 is 0x0057, so 0x0057*8/12 = 0x3A (dec 58) characters are stored and addressed in the first tree.
-Actual binary trees are stored in pre-order traversal. In a tree bitstream 0 bit means, this is a node, 1 -- this is a leaf. Nodes are also numbered zero-based, in pre-order sequence. Start offset of the binary tree for zero character is 37464 + 57 = 374BB.  Now we can rebuild it and it will look like that:
+ 
+
+After carful code analysis, overview of all space looks like this:
+37464: char-tree structures block (size = 38334-37464 = ED0)
+38334: offset table of each separate tree from the start of char-tree block (size = 3842B - 38334 = F8 bytes = 7C pointers)
+3842c: pointer to 37464 (size 4)
+38430: pointer to 38334 (size 4)
+
+So, 3842c in ROM contains 2 pointers: 08037464 - start address of char-trees structures table, and 08038334 - 16 bit offset table of each char tree. You can easily identify 16 bit pointer table in byte array, so visually, we have 7b entries @38334-3842b and our two main pointers are stored after it (at 3842c). So we have 123 characters.
+
+
+
+37464 is a start offset of tree table, which ends right before offset table at 38334, so all character trees take only 0xED0 bytes. For half a megabyte script, that size is uncomparable with text size reduction. 
+From code analysis we can also see this char-tree structure: each consists of Look up table of char codes, stored in 12 bits (1,5 byte) and a binary tree right after them. 
+374BB is also a start address for a zero character tree structure. For zero previous character, offset, stored in table at 38334 is also a size of Look Up Table before appropriate tree structure. First offset in 38334 is 0x0057, so 0x0057*8/12 = 0x3A (dec 58) characters are stored and addressed in the first tree.
+The binary tree itself is stored in a bitstream in pre-order traversal. In a tree bitstream 0 bit means, this is a node, 1 -- this is a leaf. Leafs are numbered (zero-based), in pre-order sequence. Start offset of the binary tree for zero character is 37464 + 57 = 374BB.  Now we can rebuild it and it will look like that:
 
 --o--o--o-[0]
   |  |  |
@@ -637,6 +650,8 @@ Actual binary trees are stored in pre-order traversal. In a tree bitstream 0 bit
               `-[57]
 
 exactly 58 leafs, as we have in the 12 bits table before tree. So in general, text crawls right on this tree, meaning 0 - branch left, 1 - branch right until we hit a leaf. Leaf's number is an index in 12 bits table before tree. Index is counted backward from a tree start. For instance text bitstream like b11111 will give us index 57, which is 58*12/8 = 87 bytes away from the tree start (i.e. the beginning of trees structures table 0x37464)
+Calculated is an index to 12-bit entries, stored before tree in reverse order. If we'll decode them in ASCII we'll get (0,'W'),(1,'C'),(2,'V'),(3,'b'),(4,'('),(5,'Q'),(6,'J'),(7,'E'),(8,'O'),(9,'K')... Looks reasonable, as long as there are many question sentences, starting with a W-words, like what, where, when, who etc.
+
 
 
 
