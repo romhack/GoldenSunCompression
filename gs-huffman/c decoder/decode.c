@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
 	pBuffer = buffer;
 	t = 0xFF;                                 
 	while (t != 0) {                                  
-		t = GetNextChararacter(0, &gsrc, 0xFFFFFFE6);   
+		t = GetNextChararacter(0, &gsrc, 0x73436954);   
 		if (t >= 0x20) {                                  
 			sprintf(pBuffer, "%c", t);                        
 			pBuffer++;                                        

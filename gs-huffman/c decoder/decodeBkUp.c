@@ -194,6 +194,7 @@ u16 GetNextChararacter(u16 * last, u32 * src, u32 * flags)
 	}
 
 	//emit symbol
+        printf("got index %04X \n", nextCharIndex);
 	entryAddress = iterTreeStart - (nextCharIndex + (nextCharIndex >> 1));	// offset-back before iteration tree and each entry is 1,5 bytes long                                                                                                                                                    
 	u8 b1 = READU8(entryAddress - 1);
 	u8 b2 = READU8(entryAddress - 2);
