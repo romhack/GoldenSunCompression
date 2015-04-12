@@ -478,7 +478,7 @@ debugger> mb 020339cc
 02033a2c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
 02033a3c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
 02033a4c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
-Gotcha! Now I see that text is stored in unicode, takes 2 bytes and could be easily found by hex editor, which supports byte skip (like hexpose). Anyway, now we know RAM buffer, which is filled by some decoding function. Let's dig deeper:
+Gotcha! Now I see that text is stored in unicode, so each character takes 2 bytes. In general we could start text hacking process with straight text search in RAM dump. This can be done in almost any hex editor, supporting unicode search. Anyway, now we know RAM buffer, which is filled by some decoding function. Let's dig deeper:
 020339b0 has P letter (in "Please" word) code: 0x50. let's trace where it comes from
 
 debugger> bpw 020339b0 2
@@ -602,15 +602,28 @@ Allright, it's another procedure, starting at 30035BC, we can use the same dump,
 In overall the ROM space will look like this:
 
 37464: char-tree structures block (size = 38334-37464 = ED0)
-38334: offset table of each separate tree from the start of char-tree block (size = 3842B - 38334 = F8 bytes = 7C pointers)
+38334: offset table of each separate tree from the start of char-tree block (size = 3842C - 38334 = F8 bytes = 7C pointers)
 3842c: pointer to 37464 (size 4)
 38430: pointer to 38334 (size 4)
-38434: first block of text bitstream (from first text source pointer in table)
-38C07: length table for first text block (size FF, visually)
+38434: first block of text bitstream (from first text source pointer in table at 736B8)
+38C07: length table for first text block (from second pointer in table at 736Bc. Size FF, visually)
 38D07: second block of text bitstream
 ...
-735D5: length table for last text block (size E2, as we've found from disassembly, that 736B8 is a pointer table)
-736B8: table of 2-pointers structs. Visually it's 150 bytes long. Each entry is 8 bytes (2 32bit pointers), so 2A text block, 29 of them contain FF messages, and the last one has E2 messages, it's 0x29E2 messages for whole game.
+735D5: length table for last text block (size E2, as we've found from disassembly)
+736B8: table of 2-pointers structs (the address of table was found in InitDecodeState function). Visually it's 150 bytes long. Each entry is 8 bytes (2 32bit pointers), so 2A text blocks, 29 of them contain FF messages, and the last one has E2 messages, it's 0x29E2 messages for whole game.
+
+"Golden Sun - The Lost Age (UE)" ROM uses the same text encoding scheme with the same functions, but they are assembled at another addresses. Text structures, of course, is also stored at another offsets:
+5F914: char-tree structures block (size = 60A4C-5F914 = 0x1138)                                                                                                                                                                       
+60A4C: offset table of each separate tree from the start of char-tree block (size = 60C2F - 60A4C = 1E4 bytes = F2 pointers)                                                                                                          
+60C30: pointer to 5F914 (size 4)                                                                                                                                                                                                      
+60C34: pointer to 60A4C (size 4)                                                                                                                                                                                                      
+60C38: first block of text bitstream (from first text source pointer in table at A9F54)                                                                                                                                               
+614E4: length table for first text block (from second pointer in table at A9F58. Size FF, visually)                                                                                                                                   
+615E4: second block of text bitstream                                                                                                                                                                                                 
+...                                                                                                                                                                                                                                   
+A9EA5: length table for last text block (size AE, A9F54-A9EA5.)                                                                                                                                                                       
+A9F54: table of 2-pointers structs. Visually it's 188 bytes long. Each entry is 8 bytes (2 32bit pointers), so 31 text blocks, 29 of them contain FF messages, and the last one has AE messages, it's 0x29AE messages for whole game. 
+
 
 
 

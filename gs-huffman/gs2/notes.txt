@@ -1,0 +1,8 @@
+2031E5c in RAM: A(0x41)re you sure, we should...
+
+0803b2f4  535f strh r7, [r3, r5]
+> 0803b2f6  4006 and r6, r0
+0803b2f8  910a str r1, [sp, #0x28]
+
+
+3002784 - function start for gs2
