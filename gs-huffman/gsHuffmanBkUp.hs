@@ -1,7 +1,7 @@
 import Data.Word
 import Control.Monad.State
 import qualified Data.ByteString.Lazy as Bs
-import qualified Data.Bitstream.Lazy  as Bi
+import qualified Data.Bitstream.Lazy as Bi
 import Data.Bits
 import Data.Char
 import Data.Binary.Get
@@ -26,18 +26,15 @@ instance Show a => Show (HuffmanTree a) where
            root = paren w 
 
 ptrOffset :: Int64
-ptrOffset = 0x60A4C
+ptrOffset = 0x38334
 ptrCount :: Int
-ptrCount = 0xF2
+ptrCount = 0x7C
 treeStructStart :: Int
-treeStructStart = 0x5F914
+treeStructStart = 0x37464 
 blocksPtrTable :: Int64
-blocksPtrTable = 0xA9F54
+blocksPtrTable = 0x736b8
 msgCnt :: Int
-msgCnt = 0x29AE
-
-
-
+msgCnt = 0x29E1
 
 
 --build tree out of serialized bitstream
@@ -63,19 +60,17 @@ build12BitEntries xs = [(a `shiftL` 4) .|. (b `shiftR` 4),  ((b .&. 0x0F) `shift
     c = xs !! 2
 
 
-toBoolStream :: [Word8] -> [Bool] --convert to bytestream and then to bool via bitstream
-toBoolStream wordStream = Bi.unpack (Bi.fromByteString (Bs.pack wordStream) :: Bi.Bitstream Bi.Left)
+toBoolStream :: Bs.ByteString -> [Bool] --convert to bytestream and then to bool via bitstream
+toBoolStream inputString = Bi.unpack (Bi.fromByteString inputString :: Bi.Bitstream Bi.Left)
 
 getLutTree :: Bs.ByteString -> Int -> (String, HuffmanTree Int) --get LutTree structure with given ROM and start offset of binary tree
 getLutTree input offset = (lut, tree)
   where 
-    inputU8 = Bs.unpack input
     tree = evalState makeTree (bitstream, 0)
-    bitstream = toBoolStream $ drop offset inputU8
+    bitstream = toBoolStream $ Bs.drop (fromIntegral offset) input
     lut = map chr charTableVal
     charTableVal = build12BitEntries rInput --spliton 3 and make 12 bits of reversed bytelist 
-    rInput =  map fromIntegral $ Bs.unpack $ Bs.reverse $ Bs.take offset64 input
-    offset64 = fromIntegral offset
+    rInput =  map fromIntegral $ Bs.unpack $ Bs.reverse $ Bs.take (fromIntegral offset) input
 
 get2Ptrs :: Get (Int, Int) --get 2 ptrs in tuple and convert them to ROM offset
 get2Ptrs = do
@@ -92,13 +87,13 @@ msgOffsets input tblOffset msgCount = concat $ getBlockMsgOffsets startOffsets l
     lengthTblOffsets = map snd blockPtrs--extract two lists
     getLengthTable size off = map fromIntegral $ take size $ drop off $ Bs.unpack input
     lengthTables = map (getLengthTable 0xFF) (init lengthTblOffsets) ++ [getLengthTable (msgCount `mod` 0x100) (last lengthTblOffsets)] --each block has FF msgs, but the last has less
-    getBlockMsgOffsets bs lss = zipWith (scanl (+)) bs lss --add base offset of each block to the length accumulative
+    getBlockMsgOffsets = zipWith (scanl (+)) --add base offset of each block to the length accumulative
 
 -- from a list of bits, navigate a given huffman tree and emit its decoded
 -- symbol when reaching a Leaf
 -- stop at NULL decoded char
 decode:: [(String, HuffmanTree Int)] -> [Bool] -> String
-decode trees = go $ head trees 
+decode trees = go (head trees) 
   where
     go _ [] = error "empty bitstream"
     -- choose path based on bit
@@ -116,14 +111,11 @@ decode trees = go $ head trees
 
 main :: IO()
 main = do
-  input <-  Bs.readFile "Golden Sun - The Lost Age (UE).gba"
+  input <-  Bs.readFile "0171 - Golden Sun (UE).gba"
   let 
-    inputU8 = Bs.unpack input
     treePtrs = map ((+ treeStructStart) . fromIntegral) $ runGet (replicateM ptrCount getWord16le) $ Bs.drop ptrOffset input
     lutTrees = map (getLutTree input) treePtrs
-    offsets = msgOffsets input blocksPtrTable msgCnt
-    msgBitStreams = map (toBoolStream . (`drop` inputU8)) offsets
-    msgs = concatMap (decode lutTrees) msgBitStreams
-    --msg = decode lutTrees $ msgBitStreams !! 0x2901
-  putStrLn msgs
-  --print $ length offsets
+    offsets = map fromIntegral $ msgOffsets input blocksPtrTable msgCnt
+    msgBitStreams = map (toBoolStream . (`Bs.drop` input)) offsets
+    msgs = concatMap (decode lutTrees) msgBitStreams 
+  putStr msgs

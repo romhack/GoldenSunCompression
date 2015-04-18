@@ -13,6 +13,7 @@ data  HuffmanTree a =    Leaf {weight:: Int, val:: a}
                         deriving (Eq)
 
 -- build a multiline string representation of a huffman tree
+
 instance Show a => Show (HuffmanTree a) where
   show = go ""
     where
@@ -28,16 +29,9 @@ instance Show a => Show (HuffmanTree a) where
 ptrOffset :: Int64
 ptrOffset = 0x60A4C
 ptrCount :: Int
-ptrCount = 0xF2
+ptrCount = 0xF1
 treeStructStart :: Int
 treeStructStart = 0x5F914
-blocksPtrTable :: Int64
-blocksPtrTable = 0xA9F54
-msgCnt :: Int
-msgCnt = 0x29AE
-
-
-
 
 
 --build tree out of serialized bitstream
@@ -77,7 +71,7 @@ getLutTree input offset = (lut, tree)
     rInput =  map fromIntegral $ Bs.unpack $ Bs.reverse $ Bs.take offset64 input
     offset64 = fromIntegral offset
 
-get2Ptrs :: Get (Int, Int) --get 2 ptrs in tuple and convert them to ROM offset
+get2Ptrs :: Get (Int, Int)
 get2Ptrs = do
   fs <- getWord32le
   sn <- getWord32le
@@ -86,13 +80,16 @@ get2Ptrs = do
 msgOffsets :: Bs.ByteString -> Int64 -> Int -> [Int] --get a list of each message offset in ROM
 msgOffsets input tblOffset msgCount = concat $ getBlockMsgOffsets startOffsets lengthTables
   where 
-    blockCount = ceiling ((fromIntegral msgCount :: Double) / 0x100) --get total blocks from message count
-    blockPtrs = runGet (replicateM blockCount get2Ptrs) $ Bs.drop tblOffset input --get all pointers pairs
+    inputU8 = Bs.unpack input
+    blockCount = msgCount `div` 0x100
+    blockPtrs = runGet (replicateM blockCount get2Ptrs) $ Bs.drop tblOffset input
     startOffsets = map fst blockPtrs
-    lengthTblOffsets = map snd blockPtrs--extract two lists
-    getLengthTable size off = map fromIntegral $ take size $ drop off $ Bs.unpack input
-    lengthTables = map (getLengthTable 0xFF) (init lengthTblOffsets) ++ [getLengthTable (msgCount `mod` 0x100) (last lengthTblOffsets)] --each block has FF msgs, but the last has less
-    getBlockMsgOffsets bs lss = zipWith (scanl (+)) bs lss --add base offset of each block to the length accumulative
+    lengthTblOffsets = map snd blockPtrs
+    getLengthTable off = map fromIntegral $ take 0xFF $ drop off inputU8
+    lengthTables = map getLengthTable lengthTblOffsets
+    getBlockMsgOffsets [] _ = []
+    getBlockMsgOffsets (_:_) [] = []
+    getBlockMsgOffsets (b:bs) (ls: lss) = scanl (+) b ls : getBlockMsgOffsets bs lss
 
 -- from a list of bits, navigate a given huffman tree and emit its decoded
 -- symbol when reaching a Leaf
@@ -107,10 +104,11 @@ decode trees = go $ head trees
       | otherwise = go (charLut, r) bs
     -- reached leaf, emit symbol
     go (charLut, Leaf _ i) bs
-      | c == '\NUL' = "{00}\n" --each message is null terminated
+      | c == '\NUL' = "{00}\n"
       | otherwise   = prettyC ++ go (trees !! charCode) bs
       where 
         c = charLut !! i
+        charCode :: Int
         charCode = fromEnum c
         prettyC = if charCode >= 0x20 && charCode < 0x80 then [c] else printf "{%02X}" charCode 
 
@@ -121,9 +119,8 @@ main = do
     inputU8 = Bs.unpack input
     treePtrs = map ((+ treeStructStart) . fromIntegral) $ runGet (replicateM ptrCount getWord16le) $ Bs.drop ptrOffset input
     lutTrees = map (getLutTree input) treePtrs
-    offsets = msgOffsets input blocksPtrTable msgCnt
+    offsets = msgOffsets input 0xA9F54 0x29AE
     msgBitStreams = map (toBoolStream . (`drop` inputU8)) offsets
     msgs = concatMap (decode lutTrees) msgBitStreams
-    --msg = decode lutTrees $ msgBitStreams !! 0x2901
   putStrLn msgs
-  --print $ length offsets
+
