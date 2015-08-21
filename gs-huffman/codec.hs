@@ -1,3 +1,5 @@
+module Codec (decodeMsg, decodeBatch, prettyPrintBytes, getEncodedFiles) where
+
 import Data.Word
 import Control.Monad.State
 import qualified Data.ByteString.Lazy as Bs
@@ -12,6 +14,7 @@ import Data.List
 import Data.List.Split
 import Data.Ord (comparing)
 import Data.Binary.Put
+import Numeric (showHex, showIntAtBase)
 
 data  HuffmanTree a =    Leaf {weight:: Int, val:: a}
                         |Tree {weight:: Int, left:: HuffmanTree a, right:: HuffmanTree a}
@@ -30,17 +33,9 @@ instance Show a => Show (HuffmanTree a) where
            ss' = ss ++ replicate (length root - 1) ' '
            root = paren w 
 
-ptrOffset :: Int64
-ptrOffset = 0x38334
-ptrCount :: Int
-ptrCount = 0x7C
-treeStructStart :: Int
-treeStructStart = 0x37464 
-blocksPtrTable :: Int64
-blocksPtrTable = 0x736b8
-msgCnt :: Int
-msgCnt = 0x29E1
 
+gbaRomStart :: Int64
+gbaRomStart = 0x8000000
 
 --build tree out of serialized bitstream
 makeTree :: State ([Bool], Int) (HuffmanTree Int)
@@ -137,31 +132,38 @@ decode trees = go (head trees)
 prettyPrintBytes :: [Word8] -> String
 prettyPrintBytes [] = []
 prettyPrintBytes (b:bs)
-  | b == 0 = hexCode ++ "\n"
+  | b == 0 = hexCode ++ "\n" ++ prettyPrintBytes bs
   | b >= 0x20 && b < 0x80 = toEnum (fromIntegral b) : prettyPrintBytes bs
   | otherwise = hexCode ++ prettyPrintBytes bs
   where hexCode = printf "{%02X}" b
 
-main :: IO()
 
-{--decoding main
-main = do
-  input <-  Bs.readFile "0171 - Golden Sun (UE).gba"
-  let 
-    treePtrs = map ((+ treeStructStart) . fromIntegral) $ runGet (replicateM ptrCount getWord16le) $ Bs.drop ptrOffset input
+
+decodeMsg :: Bs.ByteString -> Int -> Int64 -> Int -> [Word8]
+decodeMsg input treePtrsOffset textPtrTable mIndex =  decode lutTrees msgBitStream
+  where 
+    (treesStartOffset, treesOffsetTable) = runGet get2Ptrs $ Bs.drop (fromIntegral treePtrsOffset) input
+    treesOffsetCount = (treePtrsOffset - treesOffsetTable) `div` 2 --offsets are 16 bit goes from trees to trees pointers
+    --start reading trees and calculating offsets
+    treePtrs = map ((+ treesStartOffset) . fromIntegral) $ runGet (replicateM treesOffsetCount getWord16le) $ Bs.drop (fromIntegral treesOffsetTable) input
     lutTrees = map (getLutTree input) treePtrs
-    offsets = map fromIntegral $ msgOffsets input blocksPtrTable msgCnt
-    msgBitStreams = map (toBoolStream . (`Bs.drop` input)) offsets
-    
-    msgsBin = map (decode lutTrees) msgBitStreams 
-    msgsString = concatMap prettyPrintBytes msgsBin
-  putStr msgsString
-  Bs.writeFile "script.bin" $ Bs.pack $ concat msgsBin
---}
---
---
---
+    offsets = map fromIntegral $ msgOffsets input textPtrTable (mIndex + 1) -- get one offset more in case of zero index
+    msgBitStream = toBoolStream $ Bs.drop (offsets !! mIndex) input        
 
+decodeBatch :: Bs.ByteString -> Int -> Int64 -> Int -> [Word8]
+decodeBatch input treePtrsOffset textPtrTable mCount =  concatMap (decode lutTrees) msgBitStreams 
+  where 
+    (treesStartOffset, treesOffsetTable) = runGet get2Ptrs $ Bs.drop (fromIntegral treePtrsOffset) input
+    treesOffsetCount = (treePtrsOffset - treesOffsetTable) `div` 2 --offsets are 16 bit goes from trees to trees pointers
+    --start reading trees and calculating offsets
+    treePtrs = map ((+ treesStartOffset) . fromIntegral) $ runGet (replicateM treesOffsetCount getWord16le) $ Bs.drop (fromIntegral treesOffsetTable) input
+    lutTrees = map (getLutTree input) treePtrs
+    offsets = map fromIntegral $ msgOffsets input textPtrTable mCount
+    msgBitStreams = map (toBoolStream . (`Bs.drop` input)) offsets
+
+
+
+----------Encoding part-----------------------------------
 
 -- count the number of instances each symbol occurs in a list
 -- tuples are swapped, as map had fst as Key, and we should have [(weight, char)] tuples
@@ -170,18 +172,29 @@ histogram xs = swap . M.toList $ M.fromListWith (+) [(c, 1) | c <- xs]
   where swap = map (\(a,b)->(b,a))
 
 -- build a huffman tree bototm-up from a list of symbols sorted by weight
-sortedHuffman :: [(Int,a)] -> HuffmanTree a
+sortedHuffman ::(Ord a) => [(Int,a)] -> HuffmanTree a
 -- first, convert each tuple into a Leaf, then combine
-sortedHuffman = combine . map (uncurry Leaf) 
+sortedHuffman = combine . map (uncurry Leaf) . sortBy (comparing fst) . reverse . sortBy (comparing snd) --reverse is due to game's algorithm trees build
     where
     -- repeatedly combine lowest weight trees and reinsert the result into the
     -- weight ordered list
     combine [] = error "no root found\n" 
     combine [t] = t --got a root tree
-    combine (ta: tb: ts) = combine $ insertBy (comparing weight) (mergeTree ta tb) ts
+    combine (ta: tb: ts) = combine $ insertByGt (comparing weight) (mergeTree ta tb) ts
      where
        mergeTree a b = Tree (weight a + weight b) a b
        -- make an internal node from two trees. the weight is the sum
+
+-- Insert element to the largest bound when equals are encountered
+-- Game uses this way of insert to build trees
+insertByGt :: (a -> a -> Ordering) -> a -> [a] -> [a]
+insertByGt _   x [] = [x]
+insertByGt cmp x ys@(y:ys')
+ = case cmp x y of
+     LT  -> x : ys
+     _ -> y : insertByGt cmp x ys'
+
+
 
 treesLenTable :: M.Map Word8 (Bi.Bitstream Bi.Left, Bs.ByteString) -> Bs.ByteString --get trees table of length: offset of appropriate tree bitstream from start of trees block
 treesLenTable m = runPut $ mapM_ (putWord16le . fromIntegral) $ go 0 0
@@ -192,12 +205,10 @@ treesLenTable m = runPut $ mapM_ (putWord16le . fromIntegral) $ go 0 0
           Just (bitTree, chars) -> accum + Bs.length chars : go (count+1)  (accum + Bs.length chars + ((Bi.length bitTree `div` 8) + 1)) --calc length in a normal way
           Nothing -> 0x8000 : go (count+1) accum --if char is not in the map, just put 8000 as a dummy pointer
       
-      
-writeOneTree :: String -> (Bi.Bitstream Bi.Left, Bs.ByteString) -> IO() --Sequently write 2 bytestrings out of tuple into one file
-writeOneTree treeFileName (bitTree, chars) = do
-  Bs.appendFile treeFileName chars
-  Bi.appendFile treeFileName bitTree
 
+
+treeToBytes :: (Bi.Bitstream Bi.Left, Bs.ByteString) -> Bs.ByteString
+treeToBytes (bitTree, chars) = Bs.concat [chars, Bi.toByteString bitTree]
 
 -- traverse the huffman tree generating a map from the symbol to its huffman
 -- tree path (where False is left, and True is right). 
@@ -213,9 +224,7 @@ encodeMsg m xs = Bi.toByteString (Bi.pack (go m xs 0) :: Bi.Bitstream Bi.Left) -
     go _ [] _ = []
     go codess (c:cs) prev = (codess M.! prev) M.! c ++ go codess cs c
 
-getTextLenBlock :: [Bs.ByteString] -> Bs.ByteString
-getTextLenBlock bs = Bs.concat bs `Bs.append` len
-  where len = Bs.pack $ map (fromIntegral . Bs.length) bs
+
 
 getBlockTextLen :: [Bs.ByteString] -> Bs.ByteString
 getBlockTextLen msgs = Bs.pack $ map (fromIntegral.Bs.length) msgs
@@ -229,11 +238,21 @@ getTextBlockPtrs _ [] = error "getTextBlockPtrs empty list"
 getTextBlockPtrs start [block] = start : [start + Bs.length block]
 getTextBlockPtrs start (block:blocks) = start : (start + Bs.length block) : getTextBlockPtrs (start + Bs.length block + 0x100) blocks
 
---encoding main
---
-main = do
-  input <- Bs.readFile "script.bin"
-  let
+
+alignBsTo4 :: Bs.ByteString -> Bs.ByteString --align bytestring on four by zeroes tail
+alignBsTo4 input = Bs.append input $ Bs.pack dummy
+  where
+    modulo = (Bs.length input) `mod` 4
+    dummy
+      | modulo == 0 = []
+      | otherwise =  replicate (4 - (fromIntegral modulo)) 0 --dummy list to append at the end
+
+
+
+
+getEncodedFiles :: Bs.ByteString -> Int64 -> Int64 -> [Bs.ByteString]
+getEncodedFiles input treeStartOffset treePtrsOffset = [trees, text, textPtrs]
+  where
     inputU8 = Bs.unpack input
     scriptInPairs = zip xs' $ tail $ chunksOf 1 xs' --make pairs of previous and next bytes to count them
       where xs' = 0 : inputU8 --prepend 0 before first message
@@ -248,11 +267,17 @@ main = do
     encodedBlocks = chunksOf 0x100 (map (encodeMsg codess) msgs) --these are serialized in bytestrings text blocks (0x100 msgs in each)
     blockTextLen = map getBlockTextLen encodedBlocks --array of msgs lengths for each block
     solidEncodedBlocks = map Bs.concat encodedBlocks --concat messages of one block into one bytestring
-    mergedTextBlocks = merge solidEncodedBlocks blockTextLen --intercalate text blocks with appropriate length tables
-    textBlockPtrs = getTextBlockPtrs 0x08038434 solidEncodedBlocks --calculate pairs of pointers: one for text block, second for length table
 
-  mapM_ (writeOneTree "trees.bin") (M.elems treesSerialized) --write serialized tree
-  Bs.appendFile "trees.bin" lTable
-  Bs.writeFile "textLenBlocks.bin" $ Bs.concat mergedTextBlocks --textBlocks
-  Bs.writeFile "blocksPtrs.bin" $ runPut $ mapM_ (putWord32le . fromIntegral) textBlockPtrs --pointers
+
+
+    treesOnly = Bs.concat $ map treeToBytes $ M.elems treesSerialized
+    trees = alignBsTo4 $ Bs.append treesOnly lTable
+    ptrTreesOffsets = treeStartOffset + (Bs.length treesOnly) --calc pointer for offsets
+    treePtrSerialized = runPut $ mapM_ (putWord32le.fromIntegral ) [gbaRomStart + treeStartOffset, gbaRomStart + ptrTreesOffsets] --1st ptr is original tree start, and then calculated length table pointer
+
+    textOnly = Bs.concat $ merge solidEncodedBlocks blockTextLen --intercalate text blocks with appropriate length tables
+    text = alignBsTo4 $ Bs.append treePtrSerialized textOnly --concat tree ptrs and text in one file to position pointers in solid place in ROM
+
+    textBlockPtrs = getTextBlockPtrs (gbaRomStart + treePtrsOffset + 8) solidEncodedBlocks --calculate pairs of pointers: one for text block, second for length table
+    textPtrs = runPut $ mapM_ (putWord32le . fromIntegral) textBlockPtrs
 

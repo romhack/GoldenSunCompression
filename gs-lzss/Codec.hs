@@ -134,12 +134,16 @@ entryLengthBreakdown (Refer l d) = if l > 0x110 then Refer 0x110 d : entryLength
 --convert Liter/Refer to 8-aligned list of Bools, then convert each chunk to
 --byte
 getLzFlags :: [LzEntry] -> [Word8]
-getLzFlags xs = map bitsToByte $ chunksOf 8 $ boolList ++ replicate (8 - (length boolList `mod` 8)) False
+getLzFlags xs = map bitsToByte $ chunksOf 8 $ boolList ++ dummy
   where
-  boolList = map getLzFlags' xs
-  getLzFlags' (Liter _ ) = False
-  getLzFlags' (Refer _ _ ) = True 
-  bitsToByte = foldl (\by bi -> by*2 + (if bi then 1 else 0)) 0
+    modulo = (length boolList) `mod` 8
+    dummy
+      | modulo == 0 = []
+      | otherwise =  replicate (8 - modulo) False --dummy list to append at the end
+    boolList = map getLzFlags' xs
+    getLzFlags' (Liter _ ) = False
+    getLzFlags' (Refer _ _ ) = True 
+    bitsToByte = foldl (\by bi -> by*2 + (if bi then 1 else 0)) 0
 
 
 {-

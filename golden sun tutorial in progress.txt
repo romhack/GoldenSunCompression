@@ -526,7 +526,7 @@ After carful code analysis, overview of all space looks like this:
 3842c: pointer to 37464 (size 4)
 38430: pointer to 38334 (size 4)
 
-So, 3842c in ROM contains 2 pointers: 08037464 - start address of char-trees structures table, and 08038334 - 16 bit offset table of each char tree. You can easily identify 16 bit pointer table in byte array, so visually, we have 7b entries @38334-3842b and our two main pointers are stored after it (at 3842c). So we have 123 characters.
+So, 3842c in ROM contains 2 pointers: 08037464 - start address of char-trees structures table, and 08038334 - 16 bit offset table of each char tree. You can easily identify 16 bit pointer table in byte array, so visually, we have 7b entries @38334-3842b and our two main pointers are stored after it (at 3842c). So we have 123 characters. You can also note, that pointers, for, say, 0xA - 0xF tree structures are equal 0x8000 - that's obviously a dummy initial pointer - we just have zero occurences of these bytes in game's binary script.
 
 
 
@@ -591,26 +591,27 @@ The binary tree itself is stored in a bitstream in pre-order traversal. In a tre
               `-[57]
 
 exactly 58 leafs, as we have in the 12 bits table before tree. So in general, text crawls right on this tree, meaning 0 - branch left, 1 - branch right until we hit a leaf. Leaf's number is an index in 12 bits table before tree. Index is counted backward from a tree start. For instance text bitstream like b11111 will give us index 57, which is 58*12/8 = 87 bytes away from the tree start (i.e. the beginning of trees structures table 0x37464)
-Calculated is an index to 12-bit entries, stored before tree in reverse order. If we'll decode them in ASCII we'll get (0,'W'),(1,'C'),(2,'V'),(3,'b'),(4,'('),(5,'Q'),(6,'J'),(7,'E'),(8,'O'),(9,'K')... Looks reasonable, as long as there are many question sentences, starting with a W-words, like what, where, when, who etc.
+Calculated is an index to 12-bit entries, stored before tree in reverse order. If we'll decode them in ASCII we'll get (0,'W'),(1,'C'),(2,'V'),(3,'b'),(4,'('),(5,'Q'),(6,'J'),(7,'E'),(8,'O'),(9,'K')... Looks reasonable, as long as there are many question sentences, starting with a W-words, like What, Where, When, Who etc.
 
 2. Text
 From tracing log we can trace back the first occurence of our text source pointer (it's R2 = 08040e5c in our case). It's command:
 03003600 e4923004 ldr r3, [r2], #0x4              R00=03007de0 R01=00000000 R02=08040e5c R03=00000001; R3 is a text bitstream, loaded from text source pointer.
 
-Allright, it's another procedure, starting at 30035BC, we can use the same dump, we've made for 'decode next char' function. This function is called right before string decode and it sets up text source pointer, initial text bitstream word and sets up last decoded byte to 0 (of course). From analysis we can see, that all text is splitted in blocks with FF messages in each. Each block has a section with all these encoded messages going one by one and an FF bytes size block with each encoded message length. Each decoded message is just 0-terminated, but this 0 is also encoded, so to quickly find out where is our exact message starts, our init procedure uses this length table.
+Allright, it's another procedure, starting at 30035BC, we can use the same dump, we've made for 'decode next char' function. This function is called right before string decode and it sets up text source pointer, initial text bitstream word and sets up last decoded byte to 0 (of course). From analysis we can see, that all text is splitted in blocks with 0x100 messages in each. Each block has a section with all these encoded messages going one by one and an FF bytes size block with each encoded message length. Each decoded message is just 0-terminated, but this 0 is also encoded, so to quickly find out where is our exact message starts, our init procedure uses this length table.
 
 In overall the ROM space will look like this:
 
 37464: char-tree structures block (size = 38334-37464 = ED0)
 38334: offset table of each separate tree from the start of char-tree block (size = 3842C - 38334 = F8 bytes = 7C pointers)
+2 bytes align for next 32bit pointer
 3842c: pointer to 37464 (size 4)
 38430: pointer to 38334 (size 4)
 38434: first block of text bitstream (from first text source pointer in table at 736B8)
-38C07: length table for first text block (from second pointer in table at 736Bc. Size FF, visually)
+38C07: length table for first text block (from second pointer in table at 736Bc. Size 0x100, visually)
 38D07: second block of text bitstream
 ...
 735D5: length table for last text block (size E2, as we've found from disassembly)
-736B8: table of 2-pointers structs (the address of table was found in InitDecodeState function). Visually it's 150 bytes long. Each entry is 8 bytes (2 32bit pointers), so 2A text blocks, 29 of them contain FF messages, and the last one has E2 messages, it's 0x29E2 messages for whole game.
+736B8: table of 2-pointers structs: first pointer to start of block's text, second pointer to start of block's lengths (the address of table was found in InitDecodeState function). Visually it's 150 bytes long. Each entry is 8 bytes (2 32bit pointers), so 2A text blocks, 29 of them contain FF messages, and the last one has E2 messages, it's 0x29E2 messages for whole game.
 
 "Golden Sun - The Lost Age (UE)" ROM uses the same text encoding scheme with the same functions, but they are assembled at another addresses. Text structures, of course, is also stored at another offsets:
 5F914: char-tree structures block (size = 60A4C-5F914 = 0x1138)                                                                                                                                                                       
@@ -618,11 +619,16 @@ In overall the ROM space will look like this:
 60C30: pointer to 5F914 (size 4)                                                                                                                                                                                                      
 60C34: pointer to 60A4C (size 4)                                                                                                                                                                                                      
 60C38: first block of text bitstream (from first text source pointer in table at A9F54)                                                                                                                                               
-614E4: length table for first text block (from second pointer in table at A9F58. Size FF, visually)                                                                                                                                   
+614E4: length table for first text block (from second pointer in table at A9F58. Size 0x100, visually)                                                                                                                                   
 615E4: second block of text bitstream                                                                                                                                                                                                 
 ...                                                                                                                                                                                                                                   
 A9EA5: length table for last text block (size AE, A9F54-A9EA5.)                                                                                                                                                                       
-A9F54: table of 2-pointers structs. Visually it's 188 bytes long. Each entry is 8 bytes (2 32bit pointers), so 31 text blocks, 29 of them contain FF messages, and the last one has AE messages, it's 0x29AE messages for whole game. 
+A9F54: table of 2-pointers structs. Visually it's 188 bytes long. Each entry is 8 bytes (2 32bit pointers), so 31 text blocks, 30 of them contain 0x100 messages, and the last one has AE messages, it's 0x30AE messages for whole game. 
+
+
+
+
+after writing compressor tool, the text is a little bit larger than it was in original state. there is some space for text not used by game, but right after compressed text data there's also some data used by alphabet render at the beginning of the game. to move this piece of data to the end of free space you just move the data and change pointer at 20d58 - ptr originally to 08073864
 
 
 
