@@ -14,7 +14,6 @@ import Data.List
 import Data.List.Split
 import Data.Ord (comparing)
 import Data.Binary.Put
-import Numeric (showHex, showIntAtBase)
 
 data  HuffmanTree a =    Leaf {weight:: Int, val:: a}
                         |Tree {weight:: Int, left:: HuffmanTree a, right:: HuffmanTree a}
@@ -44,12 +43,12 @@ makeTree = do
   if b 
     then do --that's a leaf, count it
       put (bs, count+1)
-      return (Leaf 0 count)
+      return Leaf {weight = 0, val = count}
     else do -- that's a node, make new tree
       put (bs, count)
       leftBranch <- makeTree
       rightBranch <- makeTree
-      return (Tree 0 leftBranch rightBranch) 
+      return Tree {weight = 0, left = leftBranch, right = rightBranch}
 
 
 --serialize huffman tree by pre-order traversal
@@ -137,29 +136,25 @@ prettyPrintBytes (b:bs)
   | otherwise = hexCode ++ prettyPrintBytes bs
   where hexCode = printf "{%02X}" b
 
+decodedStreams :: Bs.ByteString -> Int -> Int64 -> Int -> [[Word8]]
+decodedStreams input treePtrsOffset textPtrTable mIndex =  map (decode lutTrees) msgBitStreams 
+  where 
+    (treesStartOffset, treesOffsetTable) = runGet get2Ptrs $ Bs.drop (fromIntegral treePtrsOffset) input
+    treesOffsetCount = (treePtrsOffset - treesOffsetTable) `div` 2 --offsets are 16 bit goes from trees to trees pointers
+    --start reading trees and calculating offsets
+    treePtrs = map ((+ treesStartOffset) . fromIntegral) $ runGet (replicateM treesOffsetCount getWord16le) $ Bs.drop (fromIntegral treesOffsetTable) input
+    lutTrees = map (getLutTree input) treePtrs
+    offsets = map fromIntegral $ msgOffsets input textPtrTable mIndex
+    msgBitStreams = map (toBoolStream . (`Bs.drop` input)) offsets
+
 
 
 decodeMsg :: Bs.ByteString -> Int -> Int64 -> Int -> [Word8]
-decodeMsg input treePtrsOffset textPtrTable mIndex =  decode lutTrees msgBitStream
-  where 
-    (treesStartOffset, treesOffsetTable) = runGet get2Ptrs $ Bs.drop (fromIntegral treePtrsOffset) input
-    treesOffsetCount = (treePtrsOffset - treesOffsetTable) `div` 2 --offsets are 16 bit goes from trees to trees pointers
-    --start reading trees and calculating offsets
-    treePtrs = map ((+ treesStartOffset) . fromIntegral) $ runGet (replicateM treesOffsetCount getWord16le) $ Bs.drop (fromIntegral treesOffsetTable) input
-    lutTrees = map (getLutTree input) treePtrs
-    offsets = map fromIntegral $ msgOffsets input textPtrTable (mIndex + 1) -- get one offset more in case of zero index
-    msgBitStream = toBoolStream $ Bs.drop (offsets !! mIndex) input        
+decodeMsg input treePtrsOffset textPtrTable mIndex = decodedStreams input treePtrsOffset textPtrTable (mIndex + 1) !! mIndex
+     
 
 decodeBatch :: Bs.ByteString -> Int -> Int64 -> Int -> [Word8]
-decodeBatch input treePtrsOffset textPtrTable mCount =  concatMap (decode lutTrees) msgBitStreams 
-  where 
-    (treesStartOffset, treesOffsetTable) = runGet get2Ptrs $ Bs.drop (fromIntegral treePtrsOffset) input
-    treesOffsetCount = (treePtrsOffset - treesOffsetTable) `div` 2 --offsets are 16 bit goes from trees to trees pointers
-    --start reading trees and calculating offsets
-    treePtrs = map ((+ treesStartOffset) . fromIntegral) $ runGet (replicateM treesOffsetCount getWord16le) $ Bs.drop (fromIntegral treesOffsetTable) input
-    lutTrees = map (getLutTree input) treePtrs
-    offsets = map fromIntegral $ msgOffsets input textPtrTable mCount
-    msgBitStreams = map (toBoolStream . (`Bs.drop` input)) offsets
+decodeBatch input treePtrsOffset textPtrTable mCount =  concat $ decodedStreams input treePtrsOffset textPtrTable mCount
 
 
 
@@ -174,7 +169,7 @@ histogram xs = swap . M.toList $ M.fromListWith (+) [(c, 1) | c <- xs]
 -- build a huffman tree bototm-up from a list of symbols sorted by weight
 sortedHuffman ::(Ord a) => [(Int,a)] -> HuffmanTree a
 -- first, convert each tuple into a Leaf, then combine
-sortedHuffman = combine . map (uncurry Leaf) . sortBy (comparing fst) . reverse . sortBy (comparing snd) --reverse is due to game's algorithm trees build
+sortedHuffman = combine . map (uncurry Leaf) . sortBy (comparing fst) . sortBy (flip (comparing snd)) --reverse is due to game's algorithm trees build
     where
     -- repeatedly combine lowest weight trees and reinsert the result into the
     -- weight ordered list
@@ -242,10 +237,10 @@ getTextBlockPtrs start (block:blocks) = start : (start + Bs.length block) : getT
 alignBsTo4 :: Bs.ByteString -> Bs.ByteString --align bytestring on four by zeroes tail
 alignBsTo4 input = Bs.append input $ Bs.pack dummy
   where
-    modulo = (Bs.length input) `mod` 4
+    modulo = Bs.length input `mod` 4
     dummy
       | modulo == 0 = []
-      | otherwise =  replicate (4 - (fromIntegral modulo)) 0 --dummy list to append at the end
+      | otherwise =  replicate (4 - fromIntegral modulo) 0 --dummy list to append at the end
 
 
 
@@ -272,7 +267,7 @@ getEncodedFiles input treeStartOffset treePtrsOffset = [trees, text, textPtrs]
 
     treesOnly = Bs.concat $ map treeToBytes $ M.elems treesSerialized
     trees = alignBsTo4 $ Bs.append treesOnly lTable
-    ptrTreesOffsets = treeStartOffset + (Bs.length treesOnly) --calc pointer for offsets
+    ptrTreesOffsets = treeStartOffset + Bs.length treesOnly --calc pointer for offsets
     treePtrSerialized = runPut $ mapM_ (putWord32le.fromIntegral ) [gbaRomStart + treeStartOffset, gbaRomStart + ptrTreesOffsets] --1st ptr is original tree start, and then calculated length table pointer
 
     textOnly = Bs.concat $ merge solidEncodedBlocks blockTextLen --intercalate text blocks with appropriate length tables

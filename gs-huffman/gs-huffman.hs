@@ -1,4 +1,4 @@
-﻿module Main where
+module Main where
 
 import Codec
 import System.Exit
@@ -7,7 +7,6 @@ import System.Console.GetOpt
 import Control.Monad.Error
 import qualified Data.ByteString.Lazy as Bs
 import Data.Binary.Get
-import Text.Printf
 import Data.Bits
 import Data.Int
 import Data.Maybe
@@ -80,9 +79,9 @@ main = do
       let [fileName, sTreePtrsOffset, sTextPtrTable, sMIndex] = nonOpts
       input <-  Bs.readFile fileName
       let 
-        treePtrsOffset = (read sTreePtrsOffset) :: Int
-        textPtrTable = (read sTextPtrTable) :: Int64
-        mIndex = (read sMIndex) :: Int
+        treePtrsOffset = read sTreePtrsOffset :: Int
+        textPtrTable = read sTextPtrTable :: Int64
+        mIndex = read sMIndex :: Int
         decoded = decodeMsg input treePtrsOffset textPtrTable mIndex
       case optOutput opts of
          Just name -> Bs.writeFile name $ Bs.pack decoded
@@ -96,9 +95,9 @@ main = do
       let [fileName, sTreePtrsOffset, sTextPtrTable, sMCount] = nonOpts
       input <-  Bs.readFile fileName
       let 
-        treePtrsOffset = (read sTreePtrsOffset) :: Int
-        textPtrTable = (read sTextPtrTable) :: Int64
-        mCount = (read sMCount) :: Int
+        treePtrsOffset = read sTreePtrsOffset :: Int
+        textPtrTable = read sTextPtrTable :: Int64
+        mCount = read sMCount :: Int
         decoded = decodeBatch input treePtrsOffset textPtrTable mCount
       case optOutput opts of
          Just name -> Bs.writeFile name $ Bs.pack decoded
