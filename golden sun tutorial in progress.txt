@@ -500,7 +500,10 @@ From tracing log it becomes obvious, that letter code is formed somewhere near
 030035A0 31a01205 movcc r1, r5, lsl #0x04         R00=03007de0 R01=00000011 R02=08040e60 R03=00000004 R04=080374c4 R05=00000005 R06=00000000
 030035A4 31811226 orrcc r1, r1, r6, lsr #0x04     R00=03007de0 R01=00000050 R02=08040e60 R03=00000004 R04=080374c4 R05=00000005 R06=00000000
 
-Need to analyse this function - as usual we'll do a dump of WRAM via 'dsave textCode.bin 0x03000000 0xdeadbeef' and open it with IDA.
+Need to analyse this function - There are two ways for that. 
+a) As usual we'll do a dump of WRAM via 'dsave textCode.bin 0x03000000 0xdeadbeef' and open it with IDA.
+b) We could just find bytes from function in ROM file and find this place in IDA database for whole ROM analysis. For instance, I've found char decode start at 0x15430 in ROM, which means we need to go to sub_8015430 in IDA. The code will be the same, as in RAM dump, as it uses only relative offsets and no hardcoded address values.
+
 From log file it's also easy to see entry point of our decoding function and exit from it.
 
 1. Trees
@@ -795,6 +798,29 @@ Which is yet another compression scheme
 
 sub_300347C - start
 30036bc exit
+
+I've found bytes 01 50 55 E2 (which is copied to 030035c4) in ROM at 0x268C, so just go and analyse in IDA area around 0800268C, comparing code, which called our function, we see, that the start is at sub_8002544
+difference between gba rom address and ram copied addresses is 4fff0c8.
+Code analysis showed, that R0 contains source pointer, and R1 - destination. From tracing log:
+0300347C e92d42e0 stmfd sp!, {r5-r7,r9,lr}
+if we search for place in rom, decompression routine is called from here:
+08005368 4640 mov r0, r8                          R00=08002544 R01=0300347c R02=840000b1 R03=040000d4 R04=030077ff R05=000000b1 R06=0300347c R07=020301c8 R08=08073864 
+0800536A 4651 mov r1, r10                         R00=08073864 R01=0300347c R02=840000b1 R03=040000d4 R04=030077ff R05=000000b1 R06=0300347c R07=020301c8 R08=08073864 
+0800536C f001 bl $080072fc                        R00=08073864 R01=020367bc R02=840000b1 R03=040000d4 R04=030077ff R05=000000b1 R06=0300347c R07=020301c8 R08=08073864 
+
+
+73864 contains this graphics part compressed. Let's find out where the pointer 0x08073864 came from. Again, tracing back:
+08020C42 4945 ldr r1, [$08020d58] (=$08073864) Than means, there is no pointer table and pointer to compressed graphics is loaded right in the code body. 
+(?)Debugging code, I've found that one of compressed blocks is placed 434ca8 - 435ef7 in ROM. decompressor/compressor write.
+ram out buffer 203d92c - 203f9cb (not sure)
+
+
+
+First byte is compression type. 1 means usual previously discussed LZSS code with 8-bit chunks of LZ flags, and 0 means new LZSS compression scheme with sequental 1 bit of LZ flag in bitstream:
+32039c (main ptr table of game starts from 320000) has pointer to our compressed piece. Possibly others are also encoded with it.
+
+
+
 
 
 
