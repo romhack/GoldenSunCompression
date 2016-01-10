@@ -3,4 +3,6 @@
 *.o
 *log.*
 *.swp
+*.swn
+*.swo
 *.idb
