@@ -1,0 +1,19 @@
+Configuring bitstream-0.2.0.4...
+Building bitstream-0.2.0.4...
+Preprocessing library bitstream-0.2.0.4...
+[1 of 7] Compiling Data.Bitstream.Fusion.Monadic ( Data\Bitstream\Fusion\Monadic.hs, .stack-work\dist\2672c1f3\build\Data\Bitstream\Fusion\Monadic.o )
+[2 of 7] Compiling Data.Bitstream.Fusion ( Data\Bitstream\Fusion.hs, .stack-work\dist\2672c1f3\build\Data\Bitstream\Fusion.o )
+[3 of 7] Compiling Data.Bitstream.Generic ( Data\Bitstream\Generic.hs, .stack-work\dist\2672c1f3\build\Data\Bitstream\Generic.o )
+[4 of 7] Compiling Data.Bitstream.Packet ( Data\Bitstream\Packet.hs, .stack-work\dist\2672c1f3\build\Data\Bitstream\Packet.o )
+[5 of 7] Compiling Data.Bitstream.Internal ( Data\Bitstream\Internal.hs, .stack-work\dist\2672c1f3\build\Data\Bitstream\Internal.o )
+[6 of 7] Compiling Data.Bitstream   ( Data\Bitstream.hs, .stack-work\dist\2672c1f3\build\Data\Bitstream.o )
+[7 of 7] Compiling Data.Bitstream.Lazy ( Data\Bitstream\Lazy.hs, .stack-work\dist\2672c1f3\build\Data\Bitstream\Lazy.o )
+
+Data\Bitstream\Lazy.hs:692:1: Warning:
+    Rule "Lazy Bitstream unstreamChunks/streamChunks fusion" may never fire
+      because `unId' might inline first
+    Probable fix: add an INLINE[n] or NOINLINE[n] pragma on `unId'
+In-place registering bitstream-0.2.0.4...
+Installing library in
+D:\!!\gsLzssBitFlag\.stack-work\install\8851aa27\lib\x86_64-windows-ghc-7.10.3\bitstream-0.2.0.4-BQbLuh1SAyZJZAeLVOmcbb
+Registering bitstream-0.2.0.4...

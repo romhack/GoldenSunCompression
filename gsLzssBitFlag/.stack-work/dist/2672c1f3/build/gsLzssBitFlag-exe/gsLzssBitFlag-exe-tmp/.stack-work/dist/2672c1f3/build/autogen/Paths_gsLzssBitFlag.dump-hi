@@ -1,0 +1,442 @@
+
+==================== FINAL INTERFACE ====================
+2016-02-07 17:17:50.609232 UTC
+
+interface main@main:Paths_gsLzssBitFlag 7103
+  interface hash: 73541e48bf2733812486c3eb734e0682
+  ABI hash: 8a270b2f1fd24412f595810106318069
+  export-list hash: 78d2c106000cc3e5a0e1d5738bd4552e
+  orphan hash: 693e9af84d3dfcc71e640e005bdc5e2e
+  flag hash: a7e832044bd5f5ea0b29cbb034089444
+  sig of: Nothing
+  used TH splices: False
+  where
+exports:
+  Paths_gsLzssBitFlag.getBinDir
+  Paths_gsLzssBitFlag.getDataDir
+  Paths_gsLzssBitFlag.getDataFileName
+  Paths_gsLzssBitFlag.getLibDir
+  Paths_gsLzssBitFlag.getLibexecDir
+  Paths_gsLzssBitFlag.getSysconfDir
+  Paths_gsLzssBitFlag.version
+module dependencies:
+package dependencies: base-4.8.2.0* ghc-prim-0.4.0.0
+                      integer-gmp-1.0.0.0
+orphans: base-4.8.2.0:GHC.Base base-4.8.2.0:GHC.Float
+family instance modules: base-4.8.2.0:Control.Applicative
+                         base-4.8.2.0:Data.Either base-4.8.2.0:Data.Monoid
+                         base-4.8.2.0:Data.Type.Equality base-4.8.2.0:GHC.Generics
+import  -/  base-4.8.2.0:Control.Exception e9090e246fba030faecf7b81b3e8e320
+import  -/  base-4.8.2.0:Control.Exception.Base b99410eaf0cc6bb119b1d45a497c1b10
+import  -/  base-4.8.2.0:Data.Version e9980a0c41deaf91381b9a197cb9f282
+import  -/  base-4.8.2.0:GHC.Base a4939789b2cfd60b36ed163e56a623cd
+import  -/  base-4.8.2.0:GHC.IO bb5b81adcea33b14bd4abe16d7dde45f
+import  -/  base-4.8.2.0:GHC.IO.Exception e38c1261b70caecb7af416b94c82c925
+import  -/  base-4.8.2.0:Prelude 694dcaf039efe62df1c44834e2dbd2fb
+import  -/  base-4.8.2.0:System.Environment c73e1b71c29d9e28d4cdf8209f2f1559
+import  -/  ghc-prim-0.4.0.0:GHC.Types 6b27fb3fdbd0e3f0925a4496c66513bb
+9c79a354acc757babf357d3b71f348b1
+  getBinDir :: GHC.Types.IO GHC.IO.FilePath
+  {- Arity: 1, Strictness: <L,U>,
+     Unfolding: InlineRule (0, True, True)
+                Paths_gsLzssBitFlag.getBinDir1
+                  `cast`
+                (Sym (GHC.Types.NTCo:IO[0] <GHC.IO.FilePath>_R)) -}
+1940a0c86deab1deeac2efdaac0770f6
+  getBinDir1 ::
+    GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 1, Strictness: <L,U>,
+     Unfolding: (\ eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 GHC.Prim.catch#
+                   @ GHC.IO.FilePath
+                   @ GHC.Exception.SomeException
+                   Paths_gsLzssBitFlag.getBinDir4
+                   Paths_gsLzssBitFlag.getBinDir2
+                   eta) -}
+3829ad2d7db7efa4794d2ee70598cc4a
+  getBinDir2 ::
+    GHC.Exception.SomeException
+    -> GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 2,
+     Unfolding: (\ e1 :: GHC.Exception.SomeException[OneShot]
+                   eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 case e1 of wild { GHC.Exception.SomeException e100 $dException1 e2 ->
+                 case (GHC.Exception.$p1Exception @ e100 $dException1)
+                        `cast`
+                      (Data.Typeable.Internal.NTCo:Typeable[0] <*>_N <e100>_N)
+                        (GHC.Prim.proxy#
+                           @ *
+                           @ e100) of wild1 { Data.Typeable.Internal.TypeRep dt dt1 ds2 ds3 ds4 ->
+                 case dt of wild2 {
+                   DEFAULT
+                   -> GHC.Prim.raiseIO#
+                        @ GHC.Exception.SomeException
+                        @ GHC.IO.FilePath
+                        wild
+                        eta
+                   __word 7238999624334008818
+                   -> case dt1 of wild3 {
+                        DEFAULT
+                        -> GHC.Prim.raiseIO#
+                             @ GHC.Exception.SomeException
+                             @ GHC.IO.FilePath
+                             wild
+                             eta
+                        __word 10769272474234763719
+                        -> (# eta, Paths_gsLzssBitFlag.getBinDir3 #) } } } }) -}
+5ceb89331f6f575c8c4dab07595c7abc
+  getBinDir3 :: [GHC.Types.Char]
+  {- Unfolding: (GHC.CString.unpackCString#
+                   "D:\\!!\\gsLzssBitFlag\\.stack-work\\install\\8851aa27\\bin"#) -}
+fcdde65e060a1b119392d113a9cbbf39
+  getBinDir4 ::
+    GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.Base.String #)
+  {- Arity: 1,
+     Unfolding: (System.Environment.getEnv1
+                   Paths_gsLzssBitFlag.getBinDir5) -}
+a4ccd902a92b8f870569ebce7cee60fe
+  getBinDir5 :: [GHC.Types.Char]
+  {- Unfolding: (GHC.CString.unpackCString#
+                   "gsLzssBitFlag_bindir"#) -}
+fe3334858f8f6d09c330832ff702d2ca
+  getDataDir :: GHC.Types.IO GHC.IO.FilePath
+  {- Arity: 1, Strictness: <L,U>,
+     Unfolding: InlineRule (0, True, True)
+                Paths_gsLzssBitFlag.getDataDir1
+                  `cast`
+                (Sym (GHC.Types.NTCo:IO[0] <GHC.IO.FilePath>_R)) -}
+65181356186b8c1671faf17fa53b825a
+  getDataDir1 ::
+    GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 1, Strictness: <L,U>,
+     Unfolding: (\ eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 GHC.Prim.catch#
+                   @ GHC.IO.FilePath
+                   @ GHC.Exception.SomeException
+                   Paths_gsLzssBitFlag.getDataDir4
+                   Paths_gsLzssBitFlag.getDataDir2
+                   eta) -}
+1e98397338a6b0990db51b9ee58b1f14
+  getDataDir2 ::
+    GHC.Exception.SomeException
+    -> GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 2,
+     Unfolding: (\ e1 :: GHC.Exception.SomeException[OneShot]
+                   eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 case e1 of wild { GHC.Exception.SomeException e100 $dException1 e2 ->
+                 case (GHC.Exception.$p1Exception @ e100 $dException1)
+                        `cast`
+                      (Data.Typeable.Internal.NTCo:Typeable[0] <*>_N <e100>_N)
+                        (GHC.Prim.proxy#
+                           @ *
+                           @ e100) of wild1 { Data.Typeable.Internal.TypeRep dt dt1 ds2 ds3 ds4 ->
+                 case dt of wild2 {
+                   DEFAULT
+                   -> GHC.Prim.raiseIO#
+                        @ GHC.Exception.SomeException
+                        @ GHC.IO.FilePath
+                        wild
+                        eta
+                   __word 7238999624334008818
+                   -> case dt1 of wild3 {
+                        DEFAULT
+                        -> GHC.Prim.raiseIO#
+                             @ GHC.Exception.SomeException
+                             @ GHC.IO.FilePath
+                             wild
+                             eta
+                        __word 10769272474234763719
+                        -> (# eta, Paths_gsLzssBitFlag.getDataDir3 #) } } } }) -}
+0d487ad4916ef17057f9d7ed8fb96624
+  getDataDir3 :: [GHC.Types.Char]
+  {- Unfolding: (GHC.CString.unpackCString#
+                   "D:\\!!\\gsLzssBitFlag\\.stack-work\\install\\8851aa27\\share\\x86_64-windows-ghc-7.10.3\\gsLzssBitFlag-0.2.0.0"#) -}
+9a6af23291caa182c773aa8af4f26b40
+  getDataDir4 ::
+    GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.Base.String #)
+  {- Arity: 1,
+     Unfolding: (System.Environment.getEnv1
+                   Paths_gsLzssBitFlag.getDataDir5) -}
+9801054c54d880a4f4dd2d1db5a262b7
+  getDataDir5 :: [GHC.Types.Char]
+  {- Unfolding: (GHC.CString.unpackCString#
+                   "gsLzssBitFlag_datadir"#) -}
+6f6596c07722a99b93e74e6844118c44
+  getDataFileName :: GHC.IO.FilePath -> GHC.Types.IO GHC.IO.FilePath
+  {- Arity: 2, Strictness: <L,U><L,U>,
+     Unfolding: InlineRule (0, True, True)
+                Paths_gsLzssBitFlag.getDataFileName1
+                  `cast`
+                (<GHC.IO.FilePath>_R
+                 ->_R Sym (GHC.Types.NTCo:IO[0] <GHC.IO.FilePath>_R)) -}
+6808700cb721faacd1e60cb5db8c3441
+  getDataFileName1 ::
+    GHC.IO.FilePath
+    -> GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 2, Strictness: <L,U><L,U>,
+     Unfolding: (\ name :: GHC.IO.FilePath
+                   eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 case GHC.Prim.catch#
+                        @ GHC.IO.FilePath
+                        @ GHC.Exception.SomeException
+                        Paths_gsLzssBitFlag.getDataDir4
+                        Paths_gsLzssBitFlag.getDataDir2
+                        eta of ds1 { (#,#) ipv ipv1 ->
+                 (# ipv,
+                    GHC.Base.++
+                      @ GHC.Types.Char
+                      ipv1
+                      (GHC.CString.unpackAppendCString# "\\"# name) #) }) -}
+f1551892dc400e387de855523c644443
+  getLibDir :: GHC.Types.IO GHC.IO.FilePath
+  {- Arity: 1, Strictness: <L,U>,
+     Unfolding: InlineRule (0, True, True)
+                Paths_gsLzssBitFlag.getLibDir1
+                  `cast`
+                (Sym (GHC.Types.NTCo:IO[0] <GHC.IO.FilePath>_R)) -}
+0a05371b38c4abd3ba8115b5bb7c0306
+  getLibDir1 ::
+    GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 1, Strictness: <L,U>,
+     Unfolding: (\ eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 GHC.Prim.catch#
+                   @ GHC.IO.FilePath
+                   @ GHC.Exception.SomeException
+                   Paths_gsLzssBitFlag.getLibDir4
+                   Paths_gsLzssBitFlag.getLibDir2
+                   eta) -}
+a951e140a27920ea001b67eff4f73663
+  getLibDir2 ::
+    GHC.Exception.SomeException
+    -> GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 2,
+     Unfolding: (\ e1 :: GHC.Exception.SomeException[OneShot]
+                   eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 case e1 of wild { GHC.Exception.SomeException e100 $dException1 e2 ->
+                 case (GHC.Exception.$p1Exception @ e100 $dException1)
+                        `cast`
+                      (Data.Typeable.Internal.NTCo:Typeable[0] <*>_N <e100>_N)
+                        (GHC.Prim.proxy#
+                           @ *
+                           @ e100) of wild1 { Data.Typeable.Internal.TypeRep dt dt1 ds2 ds3 ds4 ->
+                 case dt of wild2 {
+                   DEFAULT
+                   -> GHC.Prim.raiseIO#
+                        @ GHC.Exception.SomeException
+                        @ GHC.IO.FilePath
+                        wild
+                        eta
+                   __word 7238999624334008818
+                   -> case dt1 of wild3 {
+                        DEFAULT
+                        -> GHC.Prim.raiseIO#
+                             @ GHC.Exception.SomeException
+                             @ GHC.IO.FilePath
+                             wild
+                             eta
+                        __word 10769272474234763719
+                        -> (# eta, Paths_gsLzssBitFlag.getLibDir3 #) } } } }) -}
+d7742f7850f821b4a4da47a8dac23816
+  getLibDir3 :: [GHC.Types.Char]
+  {- Unfolding: (GHC.CString.unpackCString#
+                   "D:\\!!\\gsLzssBitFlag\\.stack-work\\install\\8851aa27\\lib\\x86_64-windows-ghc-7.10.3\\gsLzssBitFlag-0.2.0.0-6ZlkkGaKkNE5ehSkCZZUx3"#) -}
+5328d16f8c3681b8df77d0265e1ccc19
+  getLibDir4 ::
+    GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.Base.String #)
+  {- Arity: 1,
+     Unfolding: (System.Environment.getEnv1
+                   Paths_gsLzssBitFlag.getLibDir5) -}
+e225cdcfe48812ad99da7f66cfaeccb4
+  getLibDir5 :: [GHC.Types.Char]
+  {- Unfolding: (GHC.CString.unpackCString#
+                   "gsLzssBitFlag_libdir"#) -}
+e8bbe7064188456dbf3d5a983fac7d9b
+  getLibexecDir :: GHC.Types.IO GHC.IO.FilePath
+  {- Arity: 1, Strictness: <L,U>,
+     Unfolding: InlineRule (0, True, True)
+                Paths_gsLzssBitFlag.getLibexecDir1
+                  `cast`
+                (Sym (GHC.Types.NTCo:IO[0] <GHC.IO.FilePath>_R)) -}
+b78ea8d183c9821413f9f16b72a363e2
+  getLibexecDir1 ::
+    GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 1, Strictness: <L,U>,
+     Unfolding: (\ eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 GHC.Prim.catch#
+                   @ GHC.IO.FilePath
+                   @ GHC.Exception.SomeException
+                   Paths_gsLzssBitFlag.getLibexecDir4
+                   Paths_gsLzssBitFlag.getLibexecDir2
+                   eta) -}
+964b802ebbb5159fc231de5d4e91b2ce
+  getLibexecDir2 ::
+    GHC.Exception.SomeException
+    -> GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 2,
+     Unfolding: (\ e1 :: GHC.Exception.SomeException[OneShot]
+                   eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 case e1 of wild { GHC.Exception.SomeException e100 $dException1 e2 ->
+                 case (GHC.Exception.$p1Exception @ e100 $dException1)
+                        `cast`
+                      (Data.Typeable.Internal.NTCo:Typeable[0] <*>_N <e100>_N)
+                        (GHC.Prim.proxy#
+                           @ *
+                           @ e100) of wild1 { Data.Typeable.Internal.TypeRep dt dt1 ds2 ds3 ds4 ->
+                 case dt of wild2 {
+                   DEFAULT
+                   -> GHC.Prim.raiseIO#
+                        @ GHC.Exception.SomeException
+                        @ GHC.IO.FilePath
+                        wild
+                        eta
+                   __word 7238999624334008818
+                   -> case dt1 of wild3 {
+                        DEFAULT
+                        -> GHC.Prim.raiseIO#
+                             @ GHC.Exception.SomeException
+                             @ GHC.IO.FilePath
+                             wild
+                             eta
+                        __word 10769272474234763719
+                        -> (# eta, Paths_gsLzssBitFlag.getLibexecDir3 #) } } } }) -}
+efb0c7aac381abb25169693b3c02e16e
+  getLibexecDir3 :: [GHC.Types.Char]
+  {- Unfolding: (GHC.CString.unpackCString#
+                   "D:\\!!\\gsLzssBitFlag\\.stack-work\\install\\8851aa27\\libexec"#) -}
+f1b990bda67539a457942908489d22ac
+  getLibexecDir4 ::
+    GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.Base.String #)
+  {- Arity: 1,
+     Unfolding: (System.Environment.getEnv1
+                   Paths_gsLzssBitFlag.getLibexecDir5) -}
+114ca7fb3dbae3c9bbba746695358fd1
+  getLibexecDir5 :: [GHC.Types.Char]
+  {- Unfolding: (GHC.CString.unpackCString#
+                   "gsLzssBitFlag_libexecdir"#) -}
+61193d8ae421d769c34fcf2727a9f7be
+  getSysconfDir :: GHC.Types.IO GHC.IO.FilePath
+  {- Arity: 1, Strictness: <L,U>,
+     Unfolding: InlineRule (0, True, True)
+                Paths_gsLzssBitFlag.getSysconfDir1
+                  `cast`
+                (Sym (GHC.Types.NTCo:IO[0] <GHC.IO.FilePath>_R)) -}
+bdd816c01ea0a398aa14fa3cd4f77cba
+  getSysconfDir1 ::
+    GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 1, Strictness: <L,U>,
+     Unfolding: (\ eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 GHC.Prim.catch#
+                   @ GHC.IO.FilePath
+                   @ GHC.Exception.SomeException
+                   Paths_gsLzssBitFlag.getSysconfDir4
+                   Paths_gsLzssBitFlag.getSysconfDir2
+                   eta) -}
+c2b40d4f313e3c48ceeecb439f6a6352
+  getSysconfDir2 ::
+    GHC.Exception.SomeException
+    -> GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.IO.FilePath #)
+  {- Arity: 2,
+     Unfolding: (\ e1 :: GHC.Exception.SomeException[OneShot]
+                   eta :: GHC.Prim.State# GHC.Prim.RealWorld[OneShot] ->
+                 case e1 of wild { GHC.Exception.SomeException e100 $dException1 e2 ->
+                 case (GHC.Exception.$p1Exception @ e100 $dException1)
+                        `cast`
+                      (Data.Typeable.Internal.NTCo:Typeable[0] <*>_N <e100>_N)
+                        (GHC.Prim.proxy#
+                           @ *
+                           @ e100) of wild1 { Data.Typeable.Internal.TypeRep dt dt1 ds2 ds3 ds4 ->
+                 case dt of wild2 {
+                   DEFAULT
+                   -> GHC.Prim.raiseIO#
+                        @ GHC.Exception.SomeException
+                        @ GHC.IO.FilePath
+                        wild
+                        eta
+                   __word 7238999624334008818
+                   -> case dt1 of wild3 {
+                        DEFAULT
+                        -> GHC.Prim.raiseIO#
+                             @ GHC.Exception.SomeException
+                             @ GHC.IO.FilePath
+                             wild
+                             eta
+                        __word 10769272474234763719
+                        -> (# eta, Paths_gsLzssBitFlag.getSysconfDir3 #) } } } }) -}
+9c665a33385ec875264e7ece1dee06db
+  getSysconfDir3 :: [GHC.Types.Char]
+  {- Unfolding: (GHC.CString.unpackCString#
+                   "D:\\!!\\gsLzssBitFlag\\.stack-work\\install\\8851aa27\\etc"#) -}
+ac8c54f18df1b8c1e7b288fccbeb19b5
+  getSysconfDir4 ::
+    GHC.Prim.State# GHC.Prim.RealWorld
+    -> (# GHC.Prim.State# GHC.Prim.RealWorld, GHC.Base.String #)
+  {- Arity: 1,
+     Unfolding: (System.Environment.getEnv1
+                   Paths_gsLzssBitFlag.getSysconfDir5) -}
+fb28a176b17eae0769f6312be7ea6fb0
+  getSysconfDir5 :: [GHC.Types.Char]
+  {- Unfolding: (GHC.CString.unpackCString#
+                   "gsLzssBitFlag_sysconfdir"#) -}
+ba50b04758fc8c3533e69958720659b0
+  version :: Data.Version.Version
+  {- HasNoCafRefs, Strictness: m,
+     Unfolding: (Data.Version.Version
+                   Paths_gsLzssBitFlag.version1
+                   (GHC.Types.[] @ GHC.Base.String)) -}
+e106fa4a079efc652e3124e58242572b
+  version1 :: [GHC.Types.Int]
+  {- HasNoCafRefs, Strictness: m2,
+     Unfolding: (GHC.Types.:
+                   @ GHC.Types.Int
+                   Paths_gsLzssBitFlag.version5
+                   Paths_gsLzssBitFlag.version2) -}
+6c1c346a5c1d22f288b73140e1dbee6a
+  version2 :: [GHC.Types.Int]
+  {- HasNoCafRefs, Strictness: m2,
+     Unfolding: (GHC.Types.:
+                   @ GHC.Types.Int
+                   Paths_gsLzssBitFlag.version6
+                   Paths_gsLzssBitFlag.version3) -}
+b9cdfaa1f2a3a6a40619eba85fddbbde
+  version3 :: [GHC.Types.Int]
+  {- HasNoCafRefs, Strictness: m2,
+     Unfolding: (GHC.Types.:
+                   @ GHC.Types.Int
+                   Paths_gsLzssBitFlag.version5
+                   Paths_gsLzssBitFlag.version4) -}
+63855f56108e64a021402cf5276a2d7b
+  version4 :: [GHC.Types.Int]
+  {- HasNoCafRefs, Strictness: m2,
+     Unfolding: (GHC.Types.:
+                   @ GHC.Types.Int
+                   Paths_gsLzssBitFlag.version5
+                   (GHC.Types.[] @ GHC.Types.Int)) -}
+abd565525aa05502bbcd77955442ceed
+  version5 :: GHC.Types.Int
+  {- HasNoCafRefs, Strictness: m, Unfolding: (GHC.Types.I# 0) -}
+d5d194c9ee12adea95f3d4bf6a238472
+  version6 :: GHC.Types.Int
+  {- HasNoCafRefs, Strictness: m, Unfolding: (GHC.Types.I# 2) -}
+vectorised variables:
+vectorised tycons:
+vectorised reused tycons:
+parallel variables:
+parallel tycons:
+trusted: safe
+require own pkg trusted: False
+

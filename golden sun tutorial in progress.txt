@@ -18,6 +18,8 @@ if length == 0, distance == 0; end of compressed stream
 
 These are very important for lz tool programming, as it was close to impossible to catch that imperical.
 
+Bytes of code, we've found in iwram, are found in one location of ROM: around 0x1B78 (function starts at 0x8001B70), so code was copied to iwram from this location and it's more comfortable to disassemble code from actual ROM.
+
 
 tracing back from iwram code is impossible - breaks don't work in vbasdlh and no$gba, so jump to the end of subroutine, code retruns to 
 08005414                 BL      unpackLZ
@@ -54,7 +56,7 @@ seek up:
 30037a8 from ida is exit. R0 will have 8F39AB: last byte of compressed chunk to check our decompressor (F0 bytes for whole compressed gfx piece) 
 
 
-one can think, that uncompressed size is (20 tiles x8x8 pixels)/2 (as it's 4bpp) = 0x280 bytes. But remember, what we saw: gfx was transfered via DMA. and If we see at outPtr in the beginning and end: 2036abc - 20367bc = 0x300 bytes. What is actually encoded in compressed stream. 
+one can think, that uncompressed size is (20 tiles 8x8 pixels)/2 (as it's 4bpp) = 0x280 bytes. But remember, what we saw: gfx was transfered via DMA. and If we see at outPtr in the beginning and end: 2036abc - 20367bc = 0x300 bytes. What is actually encoded in compressed stream. 
 
 
 40 FF 0101: means FF and then distance is 1 and length is 2.  length > distance, which copies bytes, which were copied before, but in the same LZ reference pair.
@@ -816,7 +818,7 @@ ram out buffer 203d92c - 203f9cb (not sure)
 
 
 
-First byte is compression type. 1 means usual previously discussed LZSS code with 8-bit chunks of LZ flags (block stream), and 0 means new LZSS compression scheme with sequental 1 bit of LZ flag in bitstream:
+First byte is compression type. 1 means usual previously discussed LZSS code with 8-bit chunks of LZ flags (block stream), and 0 means new LZSS compression scheme with sequental 1 bit of LZ flag in bitstream  Other than 1 or 0 codes force exit from decompression routine.
 32039c (main ptr table of game starts from 320000) has pointer to our compressed piece. Possibly others are also encoded with it.
 
 
