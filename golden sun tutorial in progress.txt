@@ -819,7 +819,7 @@ ram out buffer 203d92c - 203f9cb (not sure)
 
 
 First byte is compression type. 1 means usual previously discussed LZSS code with 8-bit chunks of LZ flags (block stream), and 0 means new LZSS compression scheme with sequental 1 bit of LZ flag in bitstream  Other than 1 or 0 codes force exit from decompression routine.
-32039c (main ptr table of game starts from 320000) has pointer to our compressed piece. Possibly others are also encoded with it.
+32039c (main ptr table of game starts from 320000) has pointer to our compressed piece. Other entries in main table can be various files, including, for example, blocks encoded with byteFlag LZSS scheme with pointer table in front of it.
 
 
 

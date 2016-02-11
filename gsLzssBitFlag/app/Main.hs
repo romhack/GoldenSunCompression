@@ -4,6 +4,7 @@ import           Codec
 import           Control.Monad.Except
 import           Data.Binary.Get
 import qualified Data.ByteString.Lazy  as Bs
+import           Data.Maybe
 import           Data.Version
 import           Paths_gsLzssBitFlag   (version)
 import           System.Console.GetOpt
@@ -19,6 +20,7 @@ data Options = Options
               {optHelp    :: Bool
               ,optVersion :: Bool
               ,optAction  :: Action
+               ,optOutput :: Maybe FilePath
               }
               deriving (Show)
 defaultOptions :: Options
@@ -26,16 +28,19 @@ defaultOptions = Options
                   {optHelp = False
                   ,optVersion = False
                   ,optAction = NoAction
+                  ,optOutput = Nothing
                   }
 
 usage :: String
-usage = usageInfo "Usage: gs-lzss [-d | -b | -e] file_name [offset]" options
+usage = usageInfo "Usage: gsLzssBitFlag [-d | -b | -e] file_name [offset]" options
 
 options :: [OptDescr (Options -> Options)]
 options =
  [ Option "d"  ["decode"]  (NoArg (\opts -> opts {optAction = Decode}))  "decode from ROM. -d <file_name offset>"
  , Option "b"  ["batch"]   (NoArg (\opts -> opts {optAction = Batch}))   "batch decode from ROM. -b <file_name table_start_offset entries_count output_folder>"
  , Option "e"  ["encode"]  (NoArg (\opts -> opts {optAction = Encode}))  "encode from raw binary. -e <file_name>"
+ , Option "o"  ["output"]  (OptArg ((\f opts -> opts {optOutput = Just f}) . fromMaybe "output.bin") "FILE")
+          "output to binary FILE"
  , Option "h?" ["help"]    (NoArg (\ opts -> opts { optHelp = True }))   "show help."
  , Option "v"  ["version"] (NoArg (\ opts -> opts { optVersion = True })) "show version number."
  ]
@@ -69,13 +74,18 @@ main = do
         exitFailure
       let [fileName, sOffset] = nonOpts
       input <-  Bs.readFile fileName
-      let decodeBlock = Bs.drop (read sOffset) input
-          (plainBlock, originalSize, plainSize) = decode decodeBlock
-      putStrLn $ printf "Decoded. Encoded block size was 0x%X bytes, decoded size is 0x%X bytes" originalSize plainSize
-      Bs.writeFile "decoded.gba" plainBlock -- .gba extension for tile editor default codec open
+      let
+        decodeBlock = Bs.drop (read sOffset) input
+      if Bs.head decodeBlock /= 0 then putStrLn "Compression type byte is not 0 - decoding cancelled."
+        else do
+          let (plainBlock, originalSize, plainSize) = decode (Bs.tail decodeBlock)
+              name = fromMaybe "decoded.gba" $ optOutput opts -- .gba extension for tile editor default codec open
+          Bs.writeFile name plainBlock
+          putStrLn $ printf "Decoded. Encoded block size was 0x%X bytes, decoded size is 0x%X bytes" originalSize plainSize
 
 
-    Batch -> undefined {-- do --batch unpack
+
+    Batch -> do --batch unpack
       when (length nonOpts /= 4) $ do
         putStrLn "Supply file name, start offset of table, entries count and output directory name"
         putStrLn usage
@@ -84,23 +94,28 @@ main = do
       input <- Bs.readFile fileName
       createDirectory dirName
       let base = read sStartOffset
-          getCountWords = replicateM (read sCount) getWord16le
-          pointers = zip [base, base+2 .. ] $ map fromIntegral (runGet getCountWords (Bs.drop base input))
+          getCountWords = replicateM (read sCount) getWord32le
+          pointers = zip [base, base+4 .. ] $ map fromIntegral (runGet getCountWords (Bs.drop base input))
           decodePointer (ptrOffset, ptr) = do
-            let  blockOffset = base + ptr
-                 (plainBlock, originalSize) = decode (Bs.drop blockOffset input)
-            putStrLn $ printf "Decoding block @0x%X, pointer @0x%X, original encoded size 0x%X" blockOffset ptrOffset originalSize
-            Bs.writeFile (printf "%s/0x%07X-p0x%07X-s0x%04X.gba" dirName blockOffset ptrOffset originalSize) plainBlock
+            let blockOffset = ptr - 0x08000000
+                decodeBlock = Bs.drop blockOffset input
+            if Bs.head decodeBlock /= 0 then putStrLn "Compression type byte is not 0 - decoding cancelled."
+              else do
+                let  (plainBlock, originalSize, plainSize) = decode (Bs.tail decodeBlock)
+                Bs.writeFile (printf "%s/0x%07X-p0x%07X-s0x%04X.gba" dirName blockOffset ptrOffset originalSize) plainBlock
+                putStrLn $ printf "Decoding block @0x%X, pointer @0x%X, original encoded size 0x%X" blockOffset ptrOffset originalSize
       mapM_ decodePointer pointers
---}
+
     Encode -> do --encoding
       when (length nonOpts /= 1) $ do
         putStrLn "Supply exactly one file name to encode"
         putStrLn usage
         exitFailure
-      let [fileName] = nonOpts
+      let
+        [fileName] = nonOpts
+        outName = fromMaybe "encoded.bin" $ optOutput opts
       input <- Bs.readFile fileName
-      Bs.writeFile "encoded.bin" $ encode input
+      Bs.writeFile outName $ Bs.cons 0 (encode input) --prepend zero as a bitFlag compression scheme
     NoAction -> do
       putStrLn "Supply action flag"
       putStrLn usage

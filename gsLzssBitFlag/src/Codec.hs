@@ -36,7 +36,7 @@ toBoolStream inputString = Bi.unpack (Bi.fromByteString inputString :: Bi.Bitstr
 bitsToNum :: (Num a) => [Bool] -> a
 bitsToNum = foldl' (\byte b -> byte*2 + if b then 1 else 0) 0
 
-deserialize :: State (BiCount Bool) [LzEntry]
+deserialize :: State ( BiCount Bool) [LzEntry]
 deserialize = do
   s <- get
   case str s of
